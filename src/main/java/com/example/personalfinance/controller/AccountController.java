@@ -1,23 +1,25 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.CreateAccountRequest;
-import com.example.personalfinance.dto.UpdateAccountNameRequest;
+import com.example.personalfinance.dto.*;
 import com.example.personalfinance.model.Account;
 import com.example.personalfinance.service.AccountService;
+import com.example.personalfinance.service.TransactionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
-    public AccountController(AccountService accountService) {
+    private final TransactionService transactionService;
+
+    public AccountController(AccountService accountService, TransactionService transactionService) {
         this.accountService = accountService;
+        this.transactionService = transactionService;
     }
 
     private final AccountService accountService;
@@ -31,6 +33,26 @@ public class AccountController {
     public ResponseEntity<Account> getAccountById(@PathVariable("id") int id) {
         Account account = accountService.getAccountById(id);
         return ResponseEntity.ok(account);
+    }
+
+    @GetMapping("/{id}/balance")
+    public ResponseEntity<AccountBalanceResponse> getCurrentBalanceByAccountId(@PathVariable("id") int id) {
+        AccountBalanceResponse accountBalanceResponse = transactionService.getCurrentBalanceByAccountId(id);
+        return ResponseEntity.ok(accountBalanceResponse);
+    }
+
+    @GetMapping("/{id}/summary")
+    public ResponseEntity<AccountSummaryResponse> getSummaryByAccountId(@PathVariable("id") int id) {
+        AccountSummaryResponse summaryResponse = transactionService.getAccountSummaryByAccountId(id);
+        return ResponseEntity.ok(summaryResponse);
+    }
+
+    @GetMapping("/{id}/period-summary")
+    public ResponseEntity<AccountPeriodSummaryResponse> getAccountPeriodSummaryByAccountId(@PathVariable("id") int id,
+                                                                                           @RequestParam("from") LocalDate from,
+                                                                                           @RequestParam("to") LocalDate to) {
+        AccountPeriodSummaryResponse periodSummary = transactionService.getAccountPeriodSummary(id, from, to);
+        return ResponseEntity.ok(periodSummary);
     }
 
     @DeleteMapping("/{id}")

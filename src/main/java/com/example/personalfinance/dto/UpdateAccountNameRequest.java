@@ -3,8 +3,6 @@ package com.example.personalfinance.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.math.BigDecimal;
-
 public class UpdateAccountNameRequest {
     @NotBlank
     @Size(max=100, message = "Tên tài khoản tối đa 100 kí tự")

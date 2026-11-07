@@ -1,10 +1,10 @@
 package com.example.personalfinance.service;
 
-import com.example.personalfinance.exception.AccountNotFoundException;
+import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Account;
 import com.example.personalfinance.repository.AccountRepository;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -23,6 +23,7 @@ public class AccountService {
         return accountRepository.save(account);
     }
 
+    @Transactional
     public Account updateAccountById(int id, String name) {
         Account account = getAccountById(id);
         account.setName(name);
@@ -35,10 +36,11 @@ public class AccountService {
 
     public Account getAccountById(int id) {
         Optional<Account> account = accountRepository.findById(id);
-        if (account.isEmpty()) throw new AccountNotFoundException(id);
+        if (account.isEmpty()) throw new NotFoundException(id);
         else return account.get();
     }
 
+    @Transactional
     public void deleteAccountById(int id) {
         Account account = getAccountById(id);
         accountRepository.delete(account);

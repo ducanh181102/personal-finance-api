@@ -1,6 +1,6 @@
 # Personal Finance API
 
-Đồ án học Java và Spring Boot thông qua việc xây dựng REST API quản lý tài chính cá nhân. Phiên bản hiện tại tập trung vào quản lý tài khoản: tạo tài khoản, xem danh sách, tìm theo ID, đổi tên và xóa.
+Đồ án học Java và Spring Boot thông qua việc xây dựng REST API quản lý tài khoản, ghi nhận giao dịch thu chi và xem báo cáo theo tài khoản.
 
 ## Công nghệ
 
@@ -94,18 +94,75 @@ Phản hồi 200 chứa tài khoản với tên mới, giữ nguyên ID, loại 
 curl -i -X DELETE http://localhost:8080/api/accounts/1
 ```
 
-Xóa thành công trả 204 và không có body. Tìm, đổi tên hoặc xóa một ID không tồn tại sẽ trả 404 nếu dữ liệu đầu vào hợp lệ.
+Xóa thành công trả `204` với body rỗng. Nếu tài khoản có giao dịch, hãy xóa các giao dịch đó trước vì chúng tham chiếu đến tài khoản. Tìm, đổi tên hoặc xóa một ID không tồn tại sẽ trả `404` nếu dữ liệu đầu vào hợp lệ.
+
+## API giao dịch
+
+| Method | Đường dẫn | Chức năng | Thành công |
+| --- | --- | --- | --- |
+| POST | `/api/transactions` | Tạo giao dịch thu hoặc chi | 201 |
+| GET | `/api/transactions` | Xem danh sách, có thể lọc theo tài khoản và ngày | 200 |
+| GET | `/api/transactions/{id}` | Xem một giao dịch theo ID | 200 |
+| DELETE | `/api/transactions/{id}` | Xóa giao dịch | 204, body rỗng |
+
+Tạo một giao dịch chi bằng ID tài khoản trả về ở bước tạo tài khoản.
+
+```bash
+curl -X POST http://localhost:8080/api/transactions \
+  -H 'Content-Type: application/json' \
+  -d '{"accountId":1,"type":"EXPENSE","amount":45000,"note":"Ăn trưa"}'
+```
+
+Dùng `INCOME` khi ghi nhận khoản thu. Máy chủ tự gán `transactionDate` theo thời điểm tạo giao dịch. Phản hồi chứa `id` của giao dịch và thông tin `account` liên kết.
+
+```bash
+curl http://localhost:8080/api/transactions
+curl 'http://localhost:8080/api/transactions?accountId=1'
+curl 'http://localhost:8080/api/transactions?accountId=1&from=2026-11-01&to=2026-11-07'
+curl http://localhost:8080/api/transactions/1
+curl -i -X DELETE http://localhost:8080/api/transactions/1
+```
+
+Khi lọc theo ngày, gửi đủ `accountId`, `from` và `to`. Hai ngày dùng định dạng `YYYY-MM-DD` và đều được tính trong kết quả. Đổi ngày ví dụ theo `transactionDate` của dữ liệu bạn muốn xem. Danh sách rỗng trả `[]`.
+
+## Số dư và báo cáo
+
+| Method | Đường dẫn | Dữ liệu trả về |
+| --- | --- | --- |
+| GET | `/api/accounts/{id}/balance` | ID tài khoản và `currentBalance` |
+| GET | `/api/accounts/{id}/summary` | ID tài khoản, tổng thu, tổng chi và số dư hiện tại |
+| GET | `/api/accounts/{id}/period-summary?from=YYYY-MM-DD&to=YYYY-MM-DD` | ID tài khoản, khoảng ngày, tổng thu, tổng chi và chênh lệch trong kỳ |
+
+Cả ba endpoint trả `200 OK` khi thành công. Số dư hiện tại được tính theo công thức `currentBalance = openingBalance + totalIncome - totalExpense` trên toàn bộ giao dịch của tài khoản.
+
+```bash
+curl 'http://localhost:8080/api/accounts/1/period-summary?from=2026-11-01&to=2026-11-07'
+```
+
+Ví dụ với một khoản thu `100000` và một khoản chi `45000` trong kỳ.
+
+```json
+{
+  "accountId": 1,
+  "from": "2026-11-01",
+  "to": "2026-11-07",
+  "totalIncome": 100000,
+  "totalExpense": 45000,
+  "netChange": 55000
+}
+```
+
+`netChange = totalIncome - totalExpense` và chỉ tính giao dịch trong khoảng ngày yêu cầu. Nếu khoảng ngày hợp lệ không có giao dịch, cả ba trường tiền đều bằng `0`.
 
 ## Validation và phản hồi lỗi
 
 | Thao tác | Quy tắc kiểm tra trong DTO |
 | --- | --- |
-| Tạo tài khoản | `name` và `type` không được null, rỗng hoặc chỉ chứa khoảng trắng; `openingBalance` không được null |
-| Đổi tên | `name` không được null, rỗng hoặc chỉ chứa khoảng trắng; tối đa 100 ký tự |
+| Tạo tài khoản | `name` và `type` bắt buộc, tối đa lần lượt 100 và 30 ký tự. `openingBalance` bắt buộc, tối đa 17 chữ số phần nguyên và 2 chữ số thập phân |
+| Đổi tên | `name` phải có ít nhất một ký tự khác khoảng trắng và dài tối đa 100 ký tự |
+| Tạo giao dịch | `accountId` và `amount` phải lớn hơn 0. `amount` tối đa 17 chữ số phần nguyên và 2 chữ số thập phân. `type` là `INCOME` hoặc `EXPENSE`. `note` tùy chọn, tối đa 255 ký tự |
 
-`type` hiện là chuỗi, ví dụ `CASH`, `BANK` hoặc `MOMO`; chưa giới hạn bằng enum. `openingBalance` sử dụng `BigDecimal` và hiện chưa có quy tắc bắt buộc số dư không âm.
-
-Các cột database giới hạn tên ở 100 ký tự, loại ở 30 ký tự và số dư ở `DECIMAL(19,2)`. DTO tạo tài khoản hiện chưa kiểm tra đầy đủ các giới hạn này.
+Loại tài khoản dùng chuỗi như `CASH`, `BANK` hoặc `MOMO`. Số dư ban đầu có thể âm.
 
 Lỗi validation trả 400 với tên trường và thông báo, ví dụ:
 
@@ -123,13 +180,15 @@ JSON sai cú pháp hoặc không chuyển được sang kiểu dữ liệu cần
 }
 ```
 
-Không tìm thấy tài khoản trả 404:
+Tài khoản hoặc giao dịch không tồn tại trả `404`.
 
 ```json
 {
-  "message": "Không tìm thấy tài khoản có ID: 99"
+  "message": "Không tìm thấy đối tượng có ID: 99"
 }
 ```
+
+Ngày sai định dạng, thiếu tham số ngày bắt buộc hoặc `from` sau `to` trả `400`. Lọc giao dịch theo ngày mà thiếu `accountId` cũng trả `400`.
 
 ## Lưu trữ dữ liệu
 
@@ -149,7 +208,7 @@ H2 lưu database trong thư mục `data/`, tính từ thư mục làm việc khi
 ```text
 src/main/java/com/example/personalfinance/
 ├── controller/   # Nhận HTTP request và tạo phản hồi
-├── dto/          # Dữ liệu đầu vào và quy tắc validation
+├── dto/          # Dữ liệu đầu vào, validation và dữ liệu phản hồi
 ├── exception/    # Exception riêng và xử lý lỗi chung
 ├── model/        # JPA Entity
 ├── repository/   # Truy cập database
@@ -178,8 +237,4 @@ Chỉ chạy kiểm thử:
 ./mvnw test -Dspring.datasource.url=jdbc:h2:mem:personalfinance-test
 ```
 
-Tham số database trong các lệnh kiểm thử giúp tách dữ liệu test khỏi database file dùng khi phát triển. Hiện repository có kiểm thử khởi động Spring context; các ví dụ API ở trên có thể dùng để kiểm tra thủ công bằng curl hoặc Postman.
-
-## Phạm vi hiện tại
-
-Dự án đang phát triển và hiện cung cấp CRUD tài khoản cùng validation và xử lý lỗi. Các chức năng thu chi, danh mục giao dịch, báo cáo và xác thực người dùng chưa được triển khai.
+Tham số database trong các lệnh kiểm thử giúp tách dữ liệu test khỏi database file dùng khi phát triển. Bộ test kiểm tra Spring khởi động, báo cáo theo ngày tính đúng số tiền và API trả `400` khi khoảng ngày bị đảo. Có thể chạy riêng các ca báo cáo với `./mvnw -Dtest=AccountPeriodSummaryTest test`.

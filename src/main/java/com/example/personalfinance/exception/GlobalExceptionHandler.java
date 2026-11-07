@@ -32,11 +32,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(errors);
     }
 
-    @ExceptionHandler(AccountNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleAccountNotFound(AccountNotFoundException ex) {
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleAccountNotFound(NotFoundException ex) {
         Map<String, String> errors = new HashMap<>();
         errors.put("message", ex.getMessage());
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errors);
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidArgument(IllegalArgumentException ex) {
+        Map<String, String> errors = new HashMap<>();
+        errors.put("message", ex.getMessage());
+
+        return ResponseEntity.badRequest().body(errors);
+    }
+
 }

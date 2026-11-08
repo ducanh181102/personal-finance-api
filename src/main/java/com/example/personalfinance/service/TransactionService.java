@@ -3,28 +3,38 @@ package com.example.personalfinance.service;
 import com.example.personalfinance.dto.AccountBalanceResponse;
 import com.example.personalfinance.dto.AccountPeriodSummaryResponse;
 import com.example.personalfinance.dto.AccountSummaryResponse;
+import com.example.personalfinance.dto.CategorySummaryResponse;
 import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Account;
+import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.model.TransactionType;
 import com.example.personalfinance.repository.TransactionRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final AccountService accountService;
+    private final CategoryService categoryService;
 
-    public TransactionService(TransactionRepository transactionRepository, AccountService accountService) {
+    public TransactionService(TransactionRepository transactionRepository, AccountService accountService, CategoryService categoryService) {
         this.transactionRepository = transactionRepository;
         this.accountService = accountService;
+        this.categoryService = categoryService;
     }
 
     public List<Transaction> getAllTransactions() {
@@ -39,12 +49,31 @@ public class TransactionService {
     }
 
     @Transactional
+    public Transaction updateTransaction(int id, BigDecimal amount, TransactionType type, String note) {
+        Transaction transaction = getTransactionById(id);
+        transaction.setAmount(amount != null ? amount : transaction.getAmount());
+        transaction.setNote(note != null ? note : transaction.getNote());
+        if (type != null && type != transaction.getCategory().getType()) {
+            throw new IllegalArgumentException(
+                    "Loại giao dịch phải trùng với loại danh mục"
+            );
+        }
+        transaction.setType(type != null ? type : transaction.getType());
+        return transactionRepository.save(transaction);
+    }
+
+    @Transactional
     public Transaction createTransaction(int accountId,
+                                         int categoryId,
                                          TransactionType type,
                                          BigDecimal amount,
-                                         String note) {
+                                         String note,
+                                         LocalDateTime transactionDate) {
         Account account = accountService.getAccountById(accountId);
-        Transaction transaction = new Transaction(account, type, amount, LocalDateTime.now(), note);
+        Category category = categoryService.findCategoryById(categoryId);
+        if (category.getType() != type)
+            throw new IllegalArgumentException("Loại danh mục phải trùng với loại giao dịch");
+        Transaction transaction = new Transaction(account, type, amount, transactionDate, note, category);
         return transactionRepository.save(transaction);
     }
 
@@ -122,6 +151,7 @@ public class TransactionService {
         return new AccountSummaryResponse(account.getId(), totalIncome, totalExpense, balance);
     }
 
+    @Transactional
     public List<Transaction> findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(int accountId, LocalDate from, LocalDate to) {
         accountService.getAccountById(accountId);
         if (from.isAfter(to)) {
@@ -132,6 +162,18 @@ public class TransactionService {
         return transactionRepository.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(accountId, start, end);
     }
 
+    @Transactional
+    public List<Transaction> findByCategoryIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(int categoryId, LocalDate from, LocalDate to) {
+        categoryService.findCategoryById(categoryId);
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("Ngày bắt đầu không được sau ngày kết thúc");
+        }
+        LocalDateTime start = from.atStartOfDay();
+        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        return transactionRepository.findByCategoryIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(categoryId, start, end);
+    }
+
+    @Transactional
     public AccountPeriodSummaryResponse getAccountPeriodSummary(int accountId, LocalDate from, LocalDate to) {
         List<Transaction> transactions = findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(accountId, from, to);
 
@@ -148,5 +190,69 @@ public class TransactionService {
         BigDecimal netChange = totalIncome.subtract(totalExpense);
 
         return new AccountPeriodSummaryResponse(accountId, from, to, totalIncome, totalExpense, netChange);
+    }
+
+    public Page<Transaction> getTransactionsPage(int page, int size, Integer accountId) {
+        PageRequest pageRequest = PageRequest.of(page, size,
+                Sort.by(
+                        Sort.Order.desc("transactionDate"),
+                        Sort.Order.desc("id")
+                ));
+        if (accountId == null) {
+            return transactionRepository.findAll(pageRequest);
+        } else {
+            accountService.getAccountById(accountId);
+            return transactionRepository.findByAccountId(accountId, pageRequest);
+        }
+    }
+
+    public Page<Transaction> findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThanPage(int page, int size, int accountId, LocalDate from, LocalDate to) {
+        accountService.getAccountById(accountId);
+        PageRequest pageRequest = PageRequest.of(page, size,
+                Sort.by(
+                        Sort.Order.desc("transactionDate"),
+                        Sort.Order.desc("id")
+                ));
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("Ngày bắt đầu không được sau ngày kết thúc");
+        }
+        LocalDateTime start = from.atStartOfDay();
+        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        return transactionRepository.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(accountId, start, end, pageRequest);
+    }
+
+    @Transactional
+    public List<Transaction> getTransactionsByCategoryId(int categoryId) {
+        categoryService.findCategoryById(categoryId);
+        return transactionRepository.findByCategoryId(categoryId);
+    }
+
+    public List<CategorySummaryResponse> getCategorySummaryByAccountId(int accountId, LocalDate from, LocalDate to) {
+        List<Transaction> transactions = findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(accountId, from, to);
+
+        Map<Category, BigDecimal> totalByCategory = transactions.stream().collect(
+                Collectors.groupingBy(Transaction::getCategory, Collectors.reducing(
+                        BigDecimal.ZERO,
+                        Transaction::getAmount,
+                        BigDecimal::add
+                ))
+        );
+
+        List<CategorySummaryResponse> responses = new ArrayList<>();
+
+        for (Map.Entry<Category, BigDecimal> entry : totalByCategory.entrySet()) {
+            Category category = entry.getKey();
+            BigDecimal total = entry.getValue();
+            CategorySummaryResponse categorySummaryResponse = new CategorySummaryResponse(
+                    category.getId(),
+                    category.getName(),
+                    category.getType(),
+                    total
+            );
+
+            responses.add(categorySummaryResponse);
+        }
+
+        return responses;
     }
 }

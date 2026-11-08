@@ -1,9 +1,11 @@
 package com.example.personalfinance;
 
 import com.example.personalfinance.model.Account;
+import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.model.TransactionType;
 import com.example.personalfinance.repository.AccountRepository;
+import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,22 +41,29 @@ class AccountPeriodSummaryTest {
     @Autowired
     private TransactionRepository transactionRepository;
 
+    @Autowired
+    private CategoryRepository categoryRepository;
+
     private Account account;
+    private Category incomeCategory;
+    private Category expenseCategory;
 
     @BeforeEach
     void createAccount() {
         account = accountRepository.save(new Account("Ví test", "CASH", BigDecimal.valueOf(500_000)));
+        incomeCategory = categoryRepository.save(new Category("Lương", TransactionType.INCOME));
+        expenseCategory = categoryRepository.save(new Category("Ăn uống", TransactionType.EXPENSE));
     }
 
     @Test
     void returnsIncomeExpenseAndNetChangeForTheRequestedDay() throws Exception {
         transactionRepository.saveAll(List.of(
                 new Transaction(account, TransactionType.INCOME, BigDecimal.valueOf(100_000),
-                        REPORT_DATE.atStartOfDay(), "Thu đầu ngày"),
+                        REPORT_DATE.atStartOfDay(), "Thu đầu ngày", incomeCategory),
                 new Transaction(account, TransactionType.EXPENSE, BigDecimal.valueOf(45_000),
-                        REPORT_DATE.atTime(23, 59, 59), "Chi cuối ngày"),
+                        REPORT_DATE.atTime(23, 59, 59), "Chi cuối ngày", expenseCategory),
                 new Transaction(account, TransactionType.INCOME, BigDecimal.valueOf(20_000),
-                        REPORT_DATE.plusDays(1).atStartOfDay(), "Thu ngày hôm sau")
+                        REPORT_DATE.plusDays(1).atStartOfDay(), "Thu ngày hôm sau", incomeCategory)
         ));
 
         mockMvc.perform(get("/api/accounts/{id}/period-summary", account.getId())

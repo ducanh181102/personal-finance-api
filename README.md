@@ -1,6 +1,6 @@
 # Personal Finance API
 
-Đồ án học Java và Spring Boot thông qua việc xây dựng REST API quản lý tài khoản, ghi nhận giao dịch thu chi và xem báo cáo theo tài khoản.
+REST API quản lý tài khoản cá nhân, giao dịch thu chi, danh mục và ngân sách theo tháng. Đây là đồ án học Java, Spring Boot, JPA/Hibernate và REST API.
 
 ## Công nghệ
 
@@ -8,15 +8,15 @@
 | --- | --- |
 | Java | 21 |
 | Spring Boot | 4.1.2 |
-| Spring Web MVC | Nhận yêu cầu HTTP và trả JSON |
-| Spring Data JPA / Hibernate | Ánh xạ đối tượng Java và thao tác với database |
-| H2 | Lưu database vào file trên máy |
-| Jakarta Validation | Kiểm tra dữ liệu đầu vào |
-| Maven Wrapper | Chạy, build và kiểm thử dự án |
+| Spring Web MVC | HTTP API và JSON |
+| Spring Data JPA / Hibernate | Ánh xạ entity và truy cập database |
+| H2 | Database file cục bộ |
+| Jakarta Validation | Validation dữ liệu đầu vào |
+| Maven Wrapper | Build và chạy kiểm thử |
 
 ## Chạy dự án
 
-Cài JDK 21 và Git. Maven Wrapper có sẵn trong repository nên không cần cài Maven riêng. Lần chạy đầu cần kết nối mạng để tải Maven và các dependency.
+Cần JDK 21. Maven Wrapper đã có sẵn nên không cần cài Maven riêng.
 
 ```bash
 git clone https://github.com/ducanh181102/personal-finance-api.git
@@ -24,163 +24,172 @@ cd personal-finance-api
 ./mvnw spring-boot:run
 ```
 
-Trên Windows, dùng `mvnw.cmd spring-boot:run`. Bạn cũng có thể mở dự án trong IntelliJ IDEA, chọn JDK 21 và chạy hàm `main` trong `PersonalFinanceApiApplication`.
-
-Địa chỉ mặc định: `http://localhost:8080`.
-
-Kiểm tra ứng dụng:
+Trên Windows dùng `mvnw.cmd spring-boot:run`. Ứng dụng mặc định chạy tại `http://localhost:8080`.
 
 ```bash
 curl http://localhost:8080/api/health
 ```
 
-Kết quả: `Personal Finance API is running`.
+## Luồng dữ liệu
 
-## API tài khoản
-
-| Method | Đường dẫn | Chức năng | Thành công |
-| --- | --- | --- | --- |
-| GET | `/api/accounts` | Xem danh sách tài khoản | 200 |
-| GET | `/api/accounts/{id}` | Tìm tài khoản theo ID | 200 |
-| POST | `/api/accounts` | Tạo tài khoản | 201 |
-| PATCH | `/api/accounts/{id}` | Đổi tên tài khoản | 200 |
-| DELETE | `/api/accounts/{id}` | Xóa tài khoản | 204, body rỗng |
-
-Các yêu cầu POST và PATCH nhận JSON trong body với header `Content-Type: application/json`.
-
-### Tạo tài khoản
-
-```bash
-curl -X POST http://localhost:8080/api/accounts \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Ví tiền mặt","type":"CASH","openingBalance":500000}'
+```text
+Account ──< Transaction >── Category
+                              │
+                              └──< Budget (một category, một tháng)
 ```
 
-Ví dụ phản hồi 201:
+- `TransactionType` chỉ có `INCOME` và `EXPENSE`.
+- Transaction phải có category cùng type với transaction.
+- Chỉ category `EXPENSE` mới tạo được budget.
+- Budget không lưu số tiền đã chi; số tiền này luôn được tính từ các transaction.
+
+## API
+
+Tất cả request có body JSON cần header `Content-Type: application/json`.
+
+### Account
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/accounts` | Danh sách tài khoản | 200 |
+| GET | `/api/accounts/{id}` | Xem một tài khoản | 200 |
+| POST | `/api/accounts` | Tạo tài khoản | 201 |
+| PATCH | `/api/accounts/{id}` | Đổi tên tài khoản | 200 |
+| DELETE | `/api/accounts/{id}` | Xóa tài khoản | 204 |
 
 ```json
 {
-  "id": 1,
   "name": "Ví tiền mặt",
   "type": "CASH",
   "openingBalance": 500000
 }
 ```
 
-ID do database sinh. Dùng ID thực tế từ phản hồi cho các thao tác tiếp theo; giá trị không nhất thiết bắt đầu từ 1 hoặc liên tiếp.
+### Category
 
-### Xem tài khoản
-
-```bash
-curl http://localhost:8080/api/accounts
-curl http://localhost:8080/api/accounts/1
-```
-
-API danh sách trả về một mảng JSON, hoặc `[]` khi chưa có tài khoản.
-
-### Đổi tên tài khoản
-
-```bash
-curl -X PATCH http://localhost:8080/api/accounts/1 \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Ví chi tiêu cá nhân"}'
-```
-
-Phản hồi 200 chứa tài khoản với tên mới, giữ nguyên ID, loại và số dư ban đầu.
-
-### Xóa tài khoản
-
-```bash
-curl -i -X DELETE http://localhost:8080/api/accounts/1
-```
-
-Xóa thành công trả `204` với body rỗng. Nếu tài khoản có giao dịch, hãy xóa các giao dịch đó trước vì chúng tham chiếu đến tài khoản. Tìm, đổi tên hoặc xóa một ID không tồn tại sẽ trả `404` nếu dữ liệu đầu vào hợp lệ.
-
-## API giao dịch
-
-| Method | Đường dẫn | Chức năng | Thành công |
+| Method | Đường dẫn | Chức năng | Status thành công |
 | --- | --- | --- | --- |
-| POST | `/api/transactions` | Tạo giao dịch thu hoặc chi | 201 |
-| GET | `/api/transactions` | Xem danh sách, có thể lọc theo tài khoản và ngày | 200 |
-| GET | `/api/transactions/{id}` | Xem một giao dịch theo ID | 200 |
-| DELETE | `/api/transactions/{id}` | Xóa giao dịch | 204, body rỗng |
+| GET | `/api/categories` | Danh sách danh mục | 200 |
+| GET | `/api/categories/{id}` | Xem một danh mục | 200 |
+| POST | `/api/categories` | Tạo danh mục | 201 |
+| PATCH | `/api/categories/{id}` | Đổi tên hoặc type | 200 |
+| DELETE | `/api/categories/{id}` | Xóa danh mục | 204 |
 
-Tạo một giao dịch chi bằng ID tài khoản trả về ở bước tạo tài khoản.
-
-```bash
-curl -X POST http://localhost:8080/api/transactions \
-  -H 'Content-Type: application/json' \
-  -d '{"accountId":1,"type":"EXPENSE","amount":45000,"note":"Ăn trưa"}'
+```json
+{
+  "name": "Ăn uống",
+  "type": "EXPENSE"
+}
 ```
 
-Dùng `INCOME` khi ghi nhận khoản thu. Máy chủ tự gán `transactionDate` theo thời điểm tạo giao dịch. Phản hồi chứa `id` của giao dịch và thông tin `account` liên kết.
+Category đang được transaction sử dụng không thể bị xóa. Type của category đang được sử dụng cũng không thể đổi, vì sẽ làm dữ liệu transaction cũ bị lệch nghiệp vụ.
 
-```bash
-curl http://localhost:8080/api/transactions
-curl 'http://localhost:8080/api/transactions?accountId=1'
-curl 'http://localhost:8080/api/transactions?accountId=1&from=2026-11-01&to=2026-11-07'
-curl http://localhost:8080/api/transactions/1
-curl -i -X DELETE http://localhost:8080/api/transactions/1
-```
+### Transaction
 
-Khi lọc theo ngày, gửi đủ `accountId`, `from` và `to`. Hai ngày dùng định dạng `YYYY-MM-DD` và đều được tính trong kết quả. Đổi ngày ví dụ theo `transactionDate` của dữ liệu bạn muốn xem. Danh sách rỗng trả `[]`.
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/transactions` | Danh sách giao dịch, có thể lọc | 200 |
+| GET | `/api/transactions/page` | Danh sách có phân trang | 200 |
+| GET | `/api/transactions/{id}` | Xem một giao dịch | 200 |
+| POST | `/api/transactions` | Tạo giao dịch | 201 |
+| PATCH | `/api/transactions/{id}` | Sửa amount, type hoặc note | 200 |
+| DELETE | `/api/transactions/{id}` | Xóa giao dịch | 204 |
 
-## Số dư và báo cáo
-
-| Method | Đường dẫn | Dữ liệu trả về |
-| --- | --- | --- |
-| GET | `/api/accounts/{id}/balance` | ID tài khoản và `currentBalance` |
-| GET | `/api/accounts/{id}/summary` | ID tài khoản, tổng thu, tổng chi và số dư hiện tại |
-| GET | `/api/accounts/{id}/period-summary?from=YYYY-MM-DD&to=YYYY-MM-DD` | ID tài khoản, khoảng ngày, tổng thu, tổng chi và chênh lệch trong kỳ |
-
-Cả ba endpoint trả `200 OK` khi thành công. Số dư hiện tại được tính theo công thức `currentBalance = openingBalance + totalIncome - totalExpense` trên toàn bộ giao dịch của tài khoản.
-
-```bash
-curl 'http://localhost:8080/api/accounts/1/period-summary?from=2026-11-01&to=2026-11-07'
-```
-
-Ví dụ với một khoản thu `100000` và một khoản chi `45000` trong kỳ.
+Ví dụ tạo khoản chi:
 
 ```json
 {
   "accountId": 1,
-  "from": "2026-11-01",
-  "to": "2026-11-07",
-  "totalIncome": 100000,
-  "totalExpense": 45000,
-  "netChange": 55000
+  "categoryId": 1,
+  "type": "EXPENSE",
+  "amount": 120000,
+  "transactionDate": "2026-11-08T12:30:00",
+  "note": "Ăn trưa"
 }
 ```
 
-`netChange = totalIncome - totalExpense` và chỉ tính giao dịch trong khoảng ngày yêu cầu. Nếu khoảng ngày hợp lệ không có giao dịch, cả ba trường tiền đều bằng `0`.
+`transactionDate` là bắt buộc, dùng định dạng `YYYY-MM-DDTHH:mm:ss` và không được ở tương lai.
 
-## Validation và phản hồi lỗi
+Lọc giao dịch theo account và khoảng ngày:
 
-| Thao tác | Quy tắc kiểm tra trong DTO |
-| --- | --- |
-| Tạo tài khoản | `name` và `type` bắt buộc, tối đa lần lượt 100 và 30 ký tự. `openingBalance` bắt buộc, tối đa 17 chữ số phần nguyên và 2 chữ số thập phân |
-| Đổi tên | `name` phải có ít nhất một ký tự khác khoảng trắng và dài tối đa 100 ký tự |
-| Tạo giao dịch | `accountId` và `amount` phải lớn hơn 0. `amount` tối đa 17 chữ số phần nguyên và 2 chữ số thập phân. `type` là `INCOME` hoặc `EXPENSE`. `note` tùy chọn, tối đa 255 ký tự |
+```text
+GET /api/transactions?accountId=1&from=2026-11-01&to=2026-11-30
+GET /api/transactions/page?accountId=1&page=0&size=10
+GET /api/transactions/page?accountId=1&from=2026-11-01&to=2026-11-30&page=0&size=10
+```
 
-Loại tài khoản dùng chuỗi như `CASH`, `BANK` hoặc `MOMO`. Số dư ban đầu có thể âm.
+Khi lọc ngày, phải gửi đầy đủ `accountId`, `from` và `to`. Cả ngày bắt đầu và kết thúc đều được tính. `page` bắt đầu từ `0`; `size` nằm trong khoảng `1` đến `100`.
 
-Lỗi validation trả 400 với tên trường và thông báo, ví dụ:
+### Báo cáo tài khoản
+
+| Method | Đường dẫn | Dữ liệu trả về |
+| --- | --- | --- |
+| GET | `/api/accounts/{id}/balance` | Số dư hiện tại |
+| GET | `/api/accounts/{id}/summary` | Tổng thu, tổng chi và số dư hiện tại |
+| GET | `/api/accounts/{id}/period-summary?from=...&to=...` | Tổng thu, chi và chênh lệch trong kỳ |
+| GET | `/api/accounts/{id}/category-summary?from=...&to=...` | Tổng tiền theo từng category trong kỳ |
+
+```text
+GET /api/accounts/1/category-summary?from=2026-11-01&to=2026-11-30
+```
+
+### Budget
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/budgets` | Danh sách budget | 200 |
+| GET | `/api/budgets/{id}` | Xem một budget | 200 |
+| POST | `/api/budgets` | Tạo budget | 201 |
+| PATCH | `/api/budgets/{id}` | Chỉ đổi hạn mức | 200 |
+| DELETE | `/api/budgets/{id}` | Xóa budget | 204 |
+| GET | `/api/budgets/{id}/summary` | Tổng quan một budget | 200 |
+| GET | `/api/budgets/summary?month=YYYY-MM-01` | Tổng quan mọi budget trong tháng | 200 |
 
 ```json
 {
-  "name": "Tên tài khoản không được để trống"
+  "categoryId": 1,
+  "month": "2026-11-01",
+  "limitAmount": 3000000
 }
 ```
 
-JSON sai cú pháp hoặc không chuyển được sang kiểu dữ liệu cần thiết, chẳng hạn `"openingBalance": "abc"`, trả 400:
+`month` bắt buộc là ngày đầu tháng. Mỗi category chỉ có một budget trong một tháng.
+
+Ví dụ response summary:
 
 ```json
 {
-  "message": "JSON không hợp lệ hoặc dữ liệu sai kiểu"
+  "budgetId": 1,
+  "categoryId": 1,
+  "categoryName": "Ăn uống",
+  "month": "2026-11-01",
+  "limitAmount": 100000,
+  "spentAmount": 120000,
+  "remainingAmount": -20000,
+  "usagePercentage": 120.00,
+  "overBudget": true
 }
 ```
 
-Tài khoản hoặc giao dịch không tồn tại trả `404`.
+`spentAmount` là tổng giao dịch của category trong tháng. `remainingAmount = limitAmount - spentAmount`; `overBudget` là `true` khi số đã chi lớn hơn hạn mức.
+
+## Validation và lỗi
+
+- Các ID phải lớn hơn `0`.
+- Amount và limit amount phải dương, tối đa 17 chữ số phần nguyên và 2 chữ số thập phân.
+- Category của transaction phải có type trùng với transaction.
+- Không thể tạo budget cho category `INCOME`.
+- `from` không được sau `to`.
+
+Validation hoặc lỗi nghiệp vụ trả `400 Bad Request`, ví dụ:
+
+```json
+{
+  "transactionDate": "Thời gian giao dịch không được ở tương lai"
+}
+```
+
+Đối tượng không tồn tại trả `404 Not Found`:
 
 ```json
 {
@@ -188,53 +197,38 @@ Tài khoản hoặc giao dịch không tồn tại trả `404`.
 }
 ```
 
-Ngày sai định dạng, thiếu tham số ngày bắt buộc hoặc `from` sau `to` trả `400`. Lọc giao dịch theo ngày mà thiếu `accountId` cũng trả `400`.
-
-## Lưu trữ dữ liệu
-
-Cấu hình hiện tại trong `src/main/resources/application.properties`:
+## Database
 
 ```properties
 spring.datasource.url=jdbc:h2:file:./data/personalfinance;DB_CLOSE_ON_EXIT=FALSE
-spring.datasource.username=sa
-spring.datasource.password=
 spring.jpa.hibernate.ddl-auto=update
 ```
 
-H2 lưu database trong thư mục `data/`, tính từ thư mục làm việc khi chạy ứng dụng. Chạy từ thư mục gốc dự án để luôn dùng cùng một database. Dữ liệu được giữ sau khi khởi động lại ứng dụng; thư mục `data/` được bỏ qua bởi Git.
+H2 lưu data tại `data/personalfinance.mv.db`. Nếu thay đổi entity theo cách không tương thích với dữ liệu cũ khi đang học, dừng ứng dụng rồi xóa file database để Hibernate tạo schema mới. Thao tác này xóa toàn bộ dữ liệu cục bộ.
+
+## Kiểm thử
+
+```bash
+./mvnw clean test -Dspring.datasource.url=jdbc:h2:mem:personalfinance-test
+```
+
+Các test hiện kiểm tra:
+
+- Spring context khởi động.
+- Báo cáo theo kỳ tính đúng thu, chi và chênh lệch.
+- Khoảng ngày không hợp lệ trả `400`.
+- Budget summary tính đúng tổng chi, phần trăm sử dụng, trạng thái vượt hạn mức và không lấy giao dịch của tháng sau.
 
 ## Cấu trúc source
 
 ```text
 src/main/java/com/example/personalfinance/
-├── controller/   # Nhận HTTP request và tạo phản hồi
-├── dto/          # Dữ liệu đầu vào, validation và dữ liệu phản hồi
-├── exception/    # Exception riêng và xử lý lỗi chung
-├── model/        # JPA Entity
-├── repository/   # Truy cập database
-└── service/      # Xử lý nghiệp vụ
+├── controller/   # HTTP request/response
+├── dto/          # Request DTO, validation, response DTO
+├── exception/    # Xử lý lỗi chung
+├── model/        # JPA entities
+├── repository/   # Spring Data JPA
+└── service/      # Nghiệp vụ
 ```
 
-Luồng chính: `Controller → Service → Repository → Database`. Các exception được hỗ trợ sẽ được `GlobalExceptionHandler` chuyển thành phản hồi HTTP tương ứng.
-
-## Build và kiểm thử
-
-Build file JAR, đồng thời dùng database trong bộ nhớ cho quá trình kiểm thử:
-
-```bash
-./mvnw clean package -Dspring.datasource.url=jdbc:h2:mem:personalfinance-test
-```
-
-Chạy file đã build:
-
-```bash
-java -jar target/personal-finance-api-0.0.1-SNAPSHOT.jar
-```
-
-Chỉ chạy kiểm thử:
-
-```bash
-./mvnw test -Dspring.datasource.url=jdbc:h2:mem:personalfinance-test
-```
-
-Tham số database trong các lệnh kiểm thử giúp tách dữ liệu test khỏi database file dùng khi phát triển. Bộ test kiểm tra Spring khởi động, báo cáo theo ngày tính đúng số tiền và API trả `400` khi khoảng ngày bị đảo. Có thể chạy riêng các ca báo cáo với `./mvnw -Dtest=AccountPeriodSummaryTest test`.
+Luồng xử lý chính: `Controller → Service → Repository → Database`.

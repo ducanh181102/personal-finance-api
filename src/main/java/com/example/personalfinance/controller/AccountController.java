@@ -55,6 +55,13 @@ public class AccountController {
         return ResponseEntity.ok(periodSummary);
     }
 
+    @GetMapping("/{id}/category-summary")
+    public List<CategorySummaryResponse> getCategorySummaryByAccountId(@PathVariable("id") int id,
+                                                                       @RequestParam("from") LocalDate from,
+                                                                       @RequestParam("to") LocalDate to) {
+        return transactionService.getCategorySummaryByAccountId(id, from, to);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAccountById(@PathVariable("id") int id) {
         accountService.deleteAccountById(id);

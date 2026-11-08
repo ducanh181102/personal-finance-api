@@ -23,16 +23,24 @@ public class Transaction {
     private LocalDateTime transactionDate;
     @Column(length = 255)
     private String note;
+    @ManyToOne
+    @JoinColumn(name = "category_id", nullable = false)
+    private Category category;
 
-    protected Transaction() {
-    }
-
-    public Transaction(Account account, TransactionType type, BigDecimal amount, LocalDateTime transactionDate, String note) {
+    public Transaction(Account account, TransactionType type, BigDecimal amount, LocalDateTime transactionDate, String note, Category category) {
         this.account = account;
         this.type = type;
         this.amount = amount;
         this.transactionDate = transactionDate;
         this.note = note;
+        this.category = category;
+    }
+
+    public Category getCategory() {
+        return category;
+    }
+
+    protected Transaction() {
     }
 
     public int getId() {
@@ -57,5 +65,17 @@ public class Transaction {
 
     public String getNote() {
         return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
+    }
+
+    public void setAmount(BigDecimal amount) {
+        this.amount = amount;
+    }
+
+    public void setType(TransactionType type) {
+        this.type = type;
     }
 }

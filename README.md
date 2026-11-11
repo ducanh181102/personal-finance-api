@@ -74,6 +74,8 @@ User chỉ có thể xem, tạo, sửa hoặc xóa Account, Category, Transactio
 
 ```text
 Account ──< Transaction >── Category
+   │                          │
+   └──< RecurringTransaction >┘
                               │
                               └──< Budget (một category, một tháng)
 ```
@@ -82,6 +84,7 @@ Account ──< Transaction >── Category
 - Transaction phải có category cùng type với transaction.
 - Chỉ category `EXPENSE` mới tạo được budget.
 - Budget không lưu số tiền đã chi; số tiền này luôn được tính từ các transaction.
+- `RecurringTransaction` là mẫu giao dịch lặp lại; nó sinh ra `Transaction` thật khi đến hạn.
 
 ## API
 
@@ -174,6 +177,35 @@ Response phân trang có cấu trúc ổn định:
 }
 ```
 
+### Recurring transaction
+
+Recurring transaction là mẫu cho các khoản lặp lại như lương, tiền trọ hoặc tiền điện. Mẫu không được tính vào dashboard cho đến khi scheduler tạo ra `Transaction` thật.
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/recurring-transactions` | Danh sách mẫu giao dịch định kỳ của user hiện tại | 200 |
+| GET | `/api/recurring-transactions/{id}` | Xem một mẫu | 200 |
+| POST | `/api/recurring-transactions` | Tạo mẫu | 201 |
+| PATCH | `/api/recurring-transactions/{id}` | Cập nhật mẫu hoặc tạm dừng/kích hoạt lại | 200 |
+| DELETE | `/api/recurring-transactions/{id}` | Xóa mẫu, không xóa lịch sử giao dịch đã sinh | 204 |
+
+Ví dụ tạo khoản tiền trọ mỗi tháng:
+
+```json
+{
+  "accountId": 1,
+  "categoryId": 2,
+  "amount": 3000000,
+  "note": "Tiền trọ hằng tháng",
+  "frequency": "MONTHLY",
+  "nextRunDate": "2026-12-05"
+}
+```
+
+`active` dùng để tạm dừng hoặc kích hoạt lại mẫu. Khi cập nhật bằng `PATCH`, không gửi field nào thì field đó được giữ nguyên.
+
+Scheduler tự chạy khi ứng dụng khởi động và mỗi ngày lúc `00:05` theo múi giờ `Asia/Ho_Chi_Minh`. Nó tìm các mẫu `active` có `nextRunDate` đã đến hạn, tạo `Transaction` thật với ngày giao dịch bằng `nextRunDate`, sau đó dời lịch sang tháng kế tiếp. Nếu server từng tắt nhiều tháng, scheduler tạo bù toàn bộ kỳ bị lỡ trong một lần chạy.
+
 ### Báo cáo tài khoản
 
 | Method | Đường dẫn | Dữ liệu trả về |
@@ -234,7 +266,7 @@ Ví dụ response summary:
 - Category của transaction phải có type trùng với transaction.
 - Không thể tạo budget cho category `INCOME`.
 - `from` không được sau `to`.
-- Không thể xóa Account hoặc Category đã có Transaction.
+- Không thể xóa Account hoặc Category đã có Transaction hoặc đang được recurring transaction sử dụng.
 
 Validation hoặc lỗi nghiệp vụ trả `400 Bad Request`, ví dụ:
 
@@ -277,6 +309,7 @@ Các test hiện kiểm tra:
 - List/pagination không làm lộ Transaction hoặc Budget của user khác.
 - Không thể xóa Account đã có Transaction; Account trống xóa thành công.
 - Soft delete từ chối token cũ; khôi phục user trả token mới dùng được.
+- Recurring scheduler tạo bù đủ transaction bị lỡ, không xử lý mẫu đã tạm dừng và dời đúng `nextRunDate`.
 
 ## Cấu trúc source
 
@@ -289,6 +322,7 @@ src/main/java/com/example/personalfinance/
 ├── mapper/       # Chuyển entity thành response DTO
 ├── model/        # JPA entities
 ├── repository/   # Spring Data JPA
+├── scheduler/    # Tác vụ tự chạy theo thời gian
 ├── security/     # JWT service và authentication filter
 └── service/      # Nghiệp vụ
 ```

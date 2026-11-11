@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 
 public class UpdateBudgetRequest {
-    @NotNull(message = "Ngân sách không được trống")
     @Positive(message = "Ngân sách phải là số dương")
     @Digits(
             integer = 17,

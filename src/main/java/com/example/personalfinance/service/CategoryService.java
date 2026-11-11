@@ -6,6 +6,7 @@ import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.TransactionType;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.CategoryRepository;
+import com.example.personalfinance.repository.RecurringTransactionRepository;
 import com.example.personalfinance.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,13 +19,13 @@ public class CategoryService {
     public final CategoryRepository categoryRepository;
     public final TransactionRepository transactionRepository;
     private final CurrentUserService currentUserService;
-    private final UserService userService;
+    private final RecurringTransactionRepository recurringTransactionRepository;
 
-    public CategoryService(CategoryRepository categoryRepository, TransactionRepository transactionRepository, CurrentUserService currentUserService, UserService userService) {
+    public CategoryService(CategoryRepository categoryRepository, TransactionRepository transactionRepository, CurrentUserService currentUserService, UserService userService, RecurringTransactionRepository recurringTransactionRepository) {
         this.categoryRepository = categoryRepository;
         this.transactionRepository = transactionRepository;
         this.currentUserService = currentUserService;
-        this.userService = userService;
+        this.recurringTransactionRepository = recurringTransactionRepository;
     }
 
     private Category getOwnedCategoryById(int id) {
@@ -70,6 +71,10 @@ public class CategoryService {
         if (transactionRepository.existsByCategoryId(id)) {
             throw new IllegalArgumentException("Không được xóa category đang có transaction sử dụng.");
         }
+
+        if (recurringTransactionRepository.existsByCategoryId(id))
+            throw new IllegalArgumentException("Không được xóa danh mục đang được dùng bởi giao dịch định kỳ.");
+
         categoryRepository.delete(category);
     }
 

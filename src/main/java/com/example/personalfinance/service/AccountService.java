@@ -5,6 +5,7 @@ import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Account;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.AccountRepository;
+import com.example.personalfinance.repository.RecurringTransactionRepository;
 import com.example.personalfinance.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,11 +18,13 @@ import java.util.Optional;
 public class AccountService {
     private final CurrentUserService currentUserService;
     private final TransactionRepository transactionRepository;
+    private final RecurringTransactionRepository recurringTransactionRepository;
 
-    public AccountService(AccountRepository accountRepository, CurrentUserService currentUserService, TransactionRepository transactionRepository) {
+    public AccountService(AccountRepository accountRepository, CurrentUserService currentUserService, TransactionRepository transactionRepository, RecurringTransactionRepository recurringTransactionRepository) {
         this.accountRepository = accountRepository;
         this.currentUserService = currentUserService;
         this.transactionRepository = transactionRepository;
+        this.recurringTransactionRepository = recurringTransactionRepository;
     }
 
     private final AccountRepository accountRepository;
@@ -63,6 +66,9 @@ public class AccountService {
         Account account = getOwnedAccountById(id);
         if (transactionRepository.existsByAccountId(id))
             throw new IllegalArgumentException("Không được xóa tài khoản đã có giao dịch.");
+        if (recurringTransactionRepository.existsByAccountId(id))
+            throw new IllegalArgumentException("Không được xóa tài khoản đang được dùng bởi giao dịch định kỳ.");
+
         accountRepository.delete(account);
     }
 

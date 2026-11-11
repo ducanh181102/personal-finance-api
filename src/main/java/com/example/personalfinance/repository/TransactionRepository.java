@@ -28,4 +28,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, Intege
     Page<Transaction> findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(int accountId, LocalDateTime from, LocalDateTime toExclusive, Pageable pageable);
 
     boolean existsByAccountId(int accountId);
+
+    List<Transaction> findByAccountUserIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(
+            int userId,
+            LocalDateTime from,
+            LocalDateTime toExclusive
+    );
 }

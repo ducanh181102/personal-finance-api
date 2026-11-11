@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -33,6 +35,21 @@ public class SecurityConfig {
     public SecurityConfig(JwtService jwtService, UserService userService) {
         this.jwtService = jwtService;
         this.userService = userService;
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return email -> userService.getUserByEmail(email)
+                .map(user -> org.springframework.security.core.userdetails.User
+                        .withUsername(user.getEmail())
+                        .password(user.getPasswordHash())
+                        .disabled(!user.isActive())
+                        .roles("USER")
+                        .build()
+                )
+                .orElseThrow(() ->
+                        new UsernameNotFoundException("Không tìm thấy user: " + email)
+                );
     }
 
     // @Bean bảo Spring: hãy gọi method này lúc khởi động, lấy object trả về và dùng nó làm cấu hình bảo mật.

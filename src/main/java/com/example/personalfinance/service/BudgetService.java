@@ -1,11 +1,9 @@
 package com.example.personalfinance.service;
 
 import com.example.personalfinance.dto.BudgetSummaryResponse;
+import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
-import com.example.personalfinance.model.Budget;
-import com.example.personalfinance.model.Category;
-import com.example.personalfinance.model.Transaction;
-import com.example.personalfinance.model.TransactionType;
+import com.example.personalfinance.model.*;
 import com.example.personalfinance.repository.BudgetRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,15 +17,26 @@ import java.util.Optional;
 @Service
 public class BudgetService {
 
-    public BudgetService(BudgetRepository budgetRepository, CategoryService categoryService, TransactionService transactionService) {
+    public BudgetService(BudgetRepository budgetRepository, CategoryService categoryService, TransactionService transactionService, CurrentUserService currentUserService) {
         this.budgetRepository = budgetRepository;
         this.categoryService = categoryService;
         this.transactionService = transactionService;
+        this.currentUserService = currentUserService;
     }
 
     private final BudgetRepository budgetRepository;
     private final CategoryService categoryService;
     private final TransactionService transactionService;
+    private final CurrentUserService currentUserService;
+
+    private Budget getOwnedBudgetById(int id) {
+        User currentUser = currentUserService.getCurrentUser();
+        Optional<Budget> budget = budgetRepository.findById(id);
+        if (budget.isEmpty()) throw new NotFoundException(id);
+        if (budget.get().getCategory().getUser().getId() != currentUser.getId())
+            throw new ForbiddenException("Không có quyền truy cập.");
+        return budget.get();
+    }
 
     @Transactional
     public Budget createBudget(int categoryId, LocalDate month, BigDecimal limitAmount) {
@@ -47,30 +56,29 @@ public class BudgetService {
 
     @Transactional
     public Budget updateBudgetById(int id, BigDecimal limitAmount) {
-        Budget budget = getBudgetById(id);
+        Budget budget = getOwnedBudgetById(id);
         budget.setLimitAmount(limitAmount);
         return budgetRepository.save(budget);
     }
 
     public List<Budget> getAllBudgets() {
-        return budgetRepository.findAll();
+        User currentUser = currentUserService.getCurrentUser();
+        return budgetRepository.findByCategoryUserId(currentUser.getId());
     }
 
     public Budget getBudgetById(int id) {
-        Optional<Budget> budget = budgetRepository.findById(id);
-        if (budget.isEmpty()) throw new NotFoundException(id);
-        else return budget.get();
+        return getOwnedBudgetById(id);
     }
 
     @Transactional
     public void deleteBudgetById(int id) {
-        Budget budget = getBudgetById(id);
+        Budget budget = getOwnedBudgetById(id);
         budgetRepository.delete(budget);
     }
 
     public BudgetSummaryResponse getBudgetSummary(int id) {
 
-        Budget budget = getBudgetById(id);
+        Budget budget = getOwnedBudgetById(id);
 
         LocalDate from = budget.getMonth();
         LocalDate to = from.withDayOfMonth(from.lengthOfMonth());
@@ -109,8 +117,7 @@ public class BudgetService {
         if (month.getDayOfMonth() != 1) {
             throw new IllegalArgumentException("Phải là ngày đầu của tháng.");
         }
-        List<Budget> budgets = budgetRepository.findByMonth(month);
+        List<Budget> budgets = budgetRepository.findByCategoryUserIdAndMonth(currentUserService.getCurrentUser().getId(), month);
         return budgets.stream().map(budget -> getBudgetSummary(budget.getId())).toList();
     }
-
 }

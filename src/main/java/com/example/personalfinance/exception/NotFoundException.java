@@ -5,4 +5,3 @@ public class NotFoundException extends RuntimeException {
         super("Không tìm thấy đối tượng có ID: " + id);
     }
 }
-

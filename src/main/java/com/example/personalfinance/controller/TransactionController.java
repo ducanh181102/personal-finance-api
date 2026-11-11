@@ -1,7 +1,10 @@
 package com.example.personalfinance.controller;
 
 import com.example.personalfinance.dto.CreateTransactionRequest;
+import com.example.personalfinance.dto.PageResponse;
+import com.example.personalfinance.dto.TransactionResponse;
 import com.example.personalfinance.dto.UpdateTransactionRequest;
+import com.example.personalfinance.mapper.TransactionMapper;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.service.TransactionService;
 import jakarta.validation.Valid;
@@ -17,13 +20,15 @@ import java.util.List;
 @RequestMapping("/api/transactions")
 public class TransactionController {
     private final TransactionService transactionService;
+    private final TransactionMapper transactionMapper;
 
-    public TransactionController(TransactionService transactionService) {
+    public TransactionController(TransactionService transactionService, TransactionMapper transactionMapper) {
         this.transactionService = transactionService;
+        this.transactionMapper = transactionMapper;
     }
 
     @GetMapping("/page")
-    public Page<Transaction> getTransactionsPage(
+    public PageResponse<TransactionResponse> getTransactionsPage(
             @RequestParam(value = "accountId", required = false) Integer accountId,
             @RequestParam(value = "from", required = false) LocalDate from,
             @RequestParam(value = "to", required = false) LocalDate to,
@@ -44,14 +49,26 @@ public class TransactionController {
             throw new IllegalArgumentException("Kích thước tối đa của 1 trang phải nằm trong khoảng từ 1 đến 100");
         }
 
-        return from != null ? transactionService.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThanPage(page, size, accountId, from, to) :
+        Page<Transaction> transactions = from != null ? transactionService.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThanPage(page, size, accountId, from, to) :
                 transactionService.getTransactionsPage(page, size, accountId);
+
+        Page<TransactionResponse> responsePage =
+                transactions.map(transactionMapper::toTransactionResponse);
+
+        return new PageResponse<>(responsePage.getContent(),
+                responsePage.getNumber(), responsePage.getSize(), responsePage.getTotalElements(),
+                responsePage.getTotalPages(), responsePage.isFirst(), responsePage.isLast());
+    }
+
+    @GetMapping("/category/{categoryId}")
+    public List<TransactionResponse> getTransactionsByCategoryId(@PathVariable("categoryId") int categoryId) {
+        return transactionService.getTransactionsByCategoryId(categoryId).stream().map(transactionMapper::toTransactionResponse).toList();
     }
 
     @GetMapping
-    public List<Transaction> getAllTransactions(@RequestParam(value = "accountId", required = false) Integer accountId,
-                                                @RequestParam(value = "from", required = false) LocalDate from,
-                                                @RequestParam(value = "to", required = false) LocalDate to) {
+    public List<TransactionResponse> getAllTransactions(@RequestParam(value = "accountId", required = false) Integer accountId,
+                                                        @RequestParam(value = "from", required = false) LocalDate from,
+                                                        @RequestParam(value = "to", required = false) LocalDate to) {
         if ((from == null) != (to == null)) {
             throw new IllegalArgumentException("Cần gửi cả ngày bắt đầu và ngày kết thúc");
         }
@@ -60,27 +77,29 @@ public class TransactionController {
             throw new IllegalArgumentException("Cần gửi accountId khi lọc theo ngày");
         }
 
-        return accountId == null ? transactionService.getAllTransactions() : from != null ?
+        List<Transaction> transactions = accountId == null ? transactionService.getAllTransactions() : from != null ?
                 transactionService.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(accountId, from, to) :
                 transactionService.getTransactionsByAccountId(accountId);
+
+        return transactions.stream().map(transactionMapper::toTransactionResponse).toList();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Transaction> getTransactionById(@PathVariable("id") int id) {
+    public ResponseEntity<TransactionResponse> getTransactionById(@PathVariable("id") int id) {
         Transaction transaction = transactionService.getTransactionById(id);
-        return ResponseEntity.ok(transaction);
+        return ResponseEntity.ok(transactionMapper.toTransactionResponse(transaction));
     }
 
     @PostMapping
-    public ResponseEntity<Transaction> createTransaction(@Valid @RequestBody CreateTransactionRequest request) {
+    public ResponseEntity<TransactionResponse> createTransaction(@Valid @RequestBody CreateTransactionRequest request) {
         Transaction transaction = transactionService.createTransaction(request.getAccountId(), request.getCategoryId(), request.getType(), request.getAmount(), request.getNote(), request.getTransactionDate());
-        return ResponseEntity.status(HttpStatus.CREATED).body(transaction);
+        return ResponseEntity.status(HttpStatus.CREATED).body(transactionMapper.toTransactionResponse(transaction));
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<Transaction> updateTransaction(@PathVariable("id") int id, @Valid @RequestBody UpdateTransactionRequest request) {
+    public ResponseEntity<TransactionResponse> updateTransaction(@PathVariable("id") int id, @Valid @RequestBody UpdateTransactionRequest request) {
         Transaction transaction = transactionService.updateTransaction(id, request.getAmount(), request.getType(), request.getNote());
-        return ResponseEntity.ok(transaction);
+        return ResponseEntity.ok(transactionMapper.toTransactionResponse(transaction));
     }
 
     @DeleteMapping("/{id}")

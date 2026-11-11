@@ -8,5 +8,6 @@ import java.util.List;
 
 public interface BudgetRepository extends JpaRepository<Budget, Integer> {
     boolean existsByCategoryIdAndMonth(int category_id, LocalDate month);
-    List<Budget> findByMonth(LocalDate month);
+    List<Budget> findByCategoryUserId(int user_id);
+    List<Budget> findByCategoryUserIdAndMonth(int userId, LocalDate month);
 }

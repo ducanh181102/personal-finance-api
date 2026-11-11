@@ -13,13 +13,21 @@ public class Category {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TransactionType type;
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    public Category(String name, TransactionType type) {
-        this.name = name;
-        this.type = type;
+    public User getUser() {
+        return user;
     }
 
-    public Category() {
+    public Category(String name, TransactionType type, User user) {
+        this.name = name;
+        this.type = type;
+        this.user = user;
+    }
+
+    protected Category() {
     }
 
     public void setName(String name) {

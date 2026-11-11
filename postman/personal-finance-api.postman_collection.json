@@ -1,0 +1,1232 @@
+{
+  "info": {
+    "_postman_id": "280f87d5-4480-4d6b-8977-f1452928bab5",
+    "name": "Personal Finance API - Local Tests",
+    "description": "Bộ 24 request kiểm tra API tài khoản. Khởi động ứng dụng trước, base_url mặc định http://localhost:8080. Chạy toàn collection theo thứ tự với 1 iteration hoặc gửi từng request. Folder 01 tạo một tài khoản test riêng, đổi tên rồi xóa tài khoản đó. Chạy request 02 để cấp account_id; các request phụ thuộc sẽ bỏ qua nếu chưa có ID. Folder 02 kiểm tra validation/JSON, folder 03 kiểm tra 404. Mỗi request có kiểm tra status và dữ liệu; 500 luôn là test thất bại. Không cần đăng nhập hoặc API key.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "account_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "test_account_name",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "updated_account_name",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - CRUD theo thứ tự",
+      "description": "Chạy 01–10 theo thứ tự. Chỉ tạo, sửa và xóa tài khoản test được tạo trong folder này.",
+      "item": [
+        {
+          "name": "01 - Kiểm tra ứng dụng",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Kiểm tra ứng dụng Spring Boot đã khởi động ở base_url.\n\nMã HTTP mong đợi: 200."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Ứng dụng đang chạy\", function () { pm.expect(pm.response.text()).to.eql(\"Personal Finance API is running\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Tạo tài khoản test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "Tạo dữ liệu giả dành riêng cho lượt test. Tự lưu ID vào collection variable account_id. Chạy request này trước các request 03–10.\n\nMã HTTP mong đợi: 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{test_account_name}}\",\n  \"type\": \"CASH\",\n  \"openingBalance\": 500000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"account_id\", \"\");",
+                  "pm.collectionVariables.set(\"test_account_name\", \"PM Test \" + Date.now());",
+                  "pm.collectionVariables.set(\"updated_account_name\", \"PM Test renamed \" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Tài khoản được tạo đúng dữ liệu và có ID\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.be.a(\"number\").and.above(0);",
+                  "    pm.expect(body.name).to.eql(pm.collectionVariables.get(\"test_account_name\"));",
+                  "    pm.expect(body.type).to.eql(\"CASH\");",
+                  "    pm.expect(body.openingBalance).to.eql(500000);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    const created = pm.response.json();",
+                  "    if (Number.isInteger(created.id) && created.id > 0) {",
+                  "        pm.collectionVariables.set(\"account_id\", String(created.id));",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Danh sách có tài khoản vừa tạo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 200."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Danh sách chứa tài khoản test\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an(\"array\");",
+                  "    pm.expect(body.some(function (account) { return account.id === Number(pm.collectionVariables.get(\"account_id\")); })).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Tìm tài khoản theo ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 200."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Đúng ID, tên, loại và số dư\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.eql(Number(pm.collectionVariables.get(\"account_id\")));",
+                  "    pm.expect(body.name).to.eql(pm.collectionVariables.get(\"test_account_name\"));",
+                  "    pm.expect(body.type).to.eql(\"CASH\");",
+                  "    pm.expect(body.openingBalance).to.eql(500000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Đổi tên tài khoản",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "Đổi tên tài khoản do request 02 tạo. ID, loại và số dư phải giữ nguyên.\n\nMã HTTP mong đợi: 200.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{updated_account_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Đúng ID, tên, loại và số dư\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.eql(Number(pm.collectionVariables.get(\"account_id\")));",
+                  "    pm.expect(body.name).to.eql(pm.collectionVariables.get(\"updated_account_name\"));",
+                  "    pm.expect(body.type).to.eql(\"CASH\");",
+                  "    pm.expect(body.openingBalance).to.eql(500000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Kiểm tra tên đã được lưu",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 200."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Đúng ID, tên, loại và số dư\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.eql(Number(pm.collectionVariables.get(\"account_id\")));",
+                  "    pm.expect(body.name).to.eql(pm.collectionVariables.get(\"updated_account_name\"));",
+                  "    pm.expect(body.type).to.eql(\"CASH\");",
+                  "    pm.expect(body.openingBalance).to.eql(500000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Xóa tài khoản test",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "Xóa tài khoản test được tạo ở request 02. Không dùng ID cố định từ dữ liệu hiện có.\n\nMã HTTP mong đợi: 204."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });",
+                  "pm.test(\"Body rỗng\", function () { pm.expect(pm.response.text()).to.eql(\"\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Tìm tài khoản đã xóa",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 404."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thông báo không tìm thấy đúng ID\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Không tìm thấy tài khoản có ID: \" + pm.collectionVariables.get(\"account_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 - Xóa lại tài khoản đã xóa",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 404."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thông báo không tìm thấy đúng ID\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Không tìm thấy tài khoản có ID: \" + pm.collectionVariables.get(\"account_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Đổi tên tài khoản đã xóa",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 404.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Test missing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownedId = pm.collectionVariables.get(\"account_id\");",
+                  "if (!ownedId) {",
+                  "    console.warn(\"Chạy request 02 - Tạo tài khoản test trước. Request này được bỏ qua vì chưa có account_id.\");",
+                  "    pm.execution.skipRequest();",
+                  "} else {",
+                  "    pm.variables.set(\"account_id\", String(ownedId));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thông báo không tìm thấy đúng ID\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Không tìm thấy tài khoản có ID: \" + pm.collectionVariables.get(\"account_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Dữ liệu không hợp lệ (400)",
+      "description": "Các request có đầu vào sai để kiểm tra handler. 500 không được chấp nhận thay cho 400.",
+      "item": [
+        {
+          "name": "11 - Tạo với tên rỗng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"type\": \"CASH\",\n  \"openingBalance\": 500000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường name\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"name\");",
+                  "    pm.expect(body[\"name\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 - Tạo với tên chỉ có khoảng trắng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"   \",\n  \"type\": \"CASH\",\n  \"openingBalance\": 500000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường name\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"name\");",
+                  "    pm.expect(body[\"name\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 - Tạo với loại rỗng",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Test validation\",\n  \"type\": \"\",\n  \"openingBalance\": 500000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường type\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"type\");",
+                  "    pm.expect(body[\"type\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 - Tạo với số dư null",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Test validation\",\n  \"type\": \"CASH\",\n  \"openingBalance\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường openingBalance\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"openingBalance\");",
+                  "    pm.expect(body[\"openingBalance\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 - Tạo thiếu số dư",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Test validation\",\n  \"type\": \"CASH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường openingBalance\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"openingBalance\");",
+                  "    pm.expect(body[\"openingBalance\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 - Số dư sai kiểu dữ liệu",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Test validation\",\n  \"type\": \"CASH\",\n  \"openingBalance\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thông báo JSON không hợp lệ\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"JSON không hợp lệ hoặc dữ liệu sai kiểu\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17 - JSON sai cú pháp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "Dấu phẩy cuối làm JSON không hợp lệ.\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"PM Test\",\"type\":\"CASH\",\"openingBalance\":500000,}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thông báo JSON không hợp lệ\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"JSON không hợp lệ hoặc dữ liệu sai kiểu\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18 - Không gửi request body",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thông báo JSON không hợp lệ\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"JSON không hợp lệ hoặc dữ liệu sai kiểu\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 - Đổi tên thành chuỗi rỗng",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "-1"
+              ]
+            },
+            "description": "Validation phải chạy trước khi gọi service tìm ID. Dùng -1 để không cập nhật dữ liệu thật.\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường name\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"name\");",
+                  "    pm.expect(body[\"name\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "20 - Đổi tên dài hơn 100 ký tự",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "-1"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường name\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"name\");",
+                  "    pm.expect(body[\"name\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "21 - Đổi tên với name null",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "-1"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Có thông báo lỗi cho trường name\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"name\");",
+                  "    pm.expect(body[\"name\"]).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Không tìm thấy tài khoản (404)",
+      "description": "Dùng ID -1, ngoài dãy ID tự sinh dương của ứng dụng.",
+      "item": [
+        {
+          "name": "22 - Tìm ID không tồn tại",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "-1"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 404."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thông báo tài khoản không tồn tại\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Không tìm thấy tài khoản có ID: -1\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "23 - Đổi tên ID không tồn tại",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "-1"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 404.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Test missing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thông báo tài khoản không tồn tại\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Không tìm thấy tài khoản có ID: -1\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "24 - Xóa ID không tồn tại",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/accounts/-1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "-1"
+              ]
+            },
+            "description": "\n\nMã HTTP mong đợi: 404."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thông báo tài khoản không tồn tại\", function () {",
+                  "    pm.expect(pm.response.json().message).to.eql(\"Không tìm thấy tài khoản có ID: -1\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "info": {
+    "_postman_id": "f5728f4e-76f4-4b37-a6ec-99530eebf08b",
+    "name": "Transaction API - Local Tests",
+    "description": "Bộ request kiểm tra API giao dịch. Chạy folder 01 theo thứ tự: nó tự tạo account test, tạo giao dịch, lấy, xóa và kiểm tra 404. Các request validation là độc lập.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "account_id", "value": "", "type": "string" },
+    { "key": "transaction_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "01 - CRUD theo thứ tự",
+      "item": [
+        {
+          "name": "01 - Tạo account test",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Transaction Test {{timestamp}}\",\n  \"type\": \"CASH\",\n  \"openingBalance\": 500000\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/accounts" },
+          "event": [{ "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('account_id', '');", "pm.collectionVariables.set('transaction_id', '');", "pm.variables.set('timestamp', Date.now());"] } }, { "listen": "test", "script": { "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "const body = pm.response.json();", "pm.collectionVariables.set('account_id', body.id);"] } }]
+        },
+        {
+          "name": "02 - Tạo giao dịch chi",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"accountId\": {{account_id}},\n  \"type\": \"EXPENSE\",\n  \"amount\": 45000,\n  \"note\": \"Ăn trưa\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "const body = pm.response.json();", "pm.expect(body.id).to.be.a('number').and.above(0);", "pm.expect(body.type).to.eql('EXPENSE');", "pm.expect(body.amount).to.eql(45000);", "pm.expect(body.transactionDate).to.exist;", "pm.collectionVariables.set('transaction_id', body.id);"] } }]
+        },
+        {
+          "name": "03 - Lấy giao dịch theo ID",
+          "request": { "method": "GET", "url": "{{base_url}}/api/transactions/{{transaction_id}}" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('transaction_id')));"] } }]
+        },
+        {
+          "name": "04 - Danh sách giao dịch",
+          "request": { "method": "GET", "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.expect(pm.response.json()).to.be.an('array');"] } }]
+        },
+        {
+          "name": "05 - Xóa giao dịch test",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/transactions/{{transaction_id}}" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 204', () => pm.response.to.have.status(204));"] } }]
+        },
+        {
+          "name": "06 - Kiểm tra giao dịch đã xóa",
+          "request": { "method": "GET", "url": "{{base_url}}/api/transactions/{{transaction_id}}" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 404', () => pm.response.to.have.status(404));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "02 - Validation (400)",
+      "item": [
+        {
+          "name": "01 - Amount bằng 0",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"type\": \"EXPENSE\",\n  \"amount\": 0\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 400', () => pm.response.to.have.status(400));"] } }]
+        },
+        {
+          "name": "02 - Amount có 3 số thập phân",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"type\": \"INCOME\",\n  \"amount\": 12.345\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 400', () => pm.response.to.have.status(400));"] } }]
+        },
+        {
+          "name": "03 - Type không hợp lệ",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"type\": \"TRANSFER\",\n  \"amount\": 10000\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 400', () => pm.response.to.have.status(400));"] } }]
+        },
+        {
+          "name": "04 - Thiếu accountId",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"type\": \"INCOME\",\n  \"amount\": 10000\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 400', () => pm.response.to.have.status(400));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "03 - Không tìm thấy (404)",
+      "item": [
+        {
+          "name": "01 - Transaction ID không tồn tại",
+          "request": { "method": "GET", "url": "{{base_url}}/api/transactions/999999" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "02 - Account ID không tồn tại khi tạo transaction",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"accountId\": 999999,\n  \"type\": \"INCOME\",\n  \"amount\": 10000\n}", "options": { "raw": { "language": "json" } } }, "url": "{{base_url}}/api/transactions" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('HTTP 404', () => pm.response.to.have.status(404));"] } }]
+        }
+      ]
+    }
+  ]
+}

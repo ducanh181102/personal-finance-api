@@ -1,7 +1,9 @@
 package com.example.personalfinance.controller;
 
+import com.example.personalfinance.dto.CategoryResponse;
 import com.example.personalfinance.dto.CreateCategoryRequest;
 import com.example.personalfinance.dto.UpdateCategoryRequest;
+import com.example.personalfinance.mapper.CategoryMapper;
 import com.example.personalfinance.model.Category;
 import com.example.personalfinance.service.CategoryService;
 import jakarta.validation.Valid;
@@ -15,32 +17,34 @@ import java.util.List;
 @RequestMapping("api/categories")
 public class CategoryController {
     private final CategoryService categoryService;
+    private final CategoryMapper categoryMapper;
 
-    public CategoryController(CategoryService categoryService) {
+    public CategoryController(CategoryService categoryService, CategoryMapper categoryMapper) {
         this.categoryService = categoryService;
+        this.categoryMapper = categoryMapper;
     }
 
     @GetMapping
-    public List<Category> getAllCategories() {
-        return categoryService.getAllCategories();
+    public List<CategoryResponse> getAllCategories() {
+        return categoryService.getCategories().stream().map(categoryMapper::toCategoryResponse).toList();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Category> getCategoryById(@PathVariable("id") Integer id) {
+    public ResponseEntity<CategoryResponse> getCategoryById(@PathVariable("id") Integer id) {
         Category category = categoryService.findCategoryById(id);
-        return ResponseEntity.ok(category);
+        return ResponseEntity.ok(categoryMapper.toCategoryResponse(category));
     }
 
     @PostMapping
-    public ResponseEntity<Category> createCategory(@Valid @RequestBody CreateCategoryRequest request) {
+    public ResponseEntity<CategoryResponse> createCategory(@Valid @RequestBody CreateCategoryRequest request) {
         Category category = categoryService.createCategory(request.getName(), request.getType());
-        return ResponseEntity.status(HttpStatus.CREATED).body(category);
+        return ResponseEntity.status(HttpStatus.CREATED).body(categoryMapper.toCategoryResponse(category));
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<Category> updateCategory(@PathVariable("id") int id, @Valid @RequestBody UpdateCategoryRequest request) {
+    public ResponseEntity<CategoryResponse> updateCategory(@PathVariable("id") int id, @Valid @RequestBody UpdateCategoryRequest request) {
         Category category = categoryService.updateCategory(id, request.getName(), request.getType());
-        return ResponseEntity.ok(category);
+        return ResponseEntity.ok(categoryMapper.toCategoryResponse(category));
     }
 
     @DeleteMapping("/{id}")

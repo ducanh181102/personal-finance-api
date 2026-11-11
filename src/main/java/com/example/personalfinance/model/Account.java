@@ -1,11 +1,6 @@
 package com.example.personalfinance.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 
@@ -25,14 +20,23 @@ public class Account {
     @Column(name = "opening_balance", nullable = false, precision = 19, scale = 2)
     private BigDecimal openingBalance;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    public Account(String name, String type, BigDecimal openingBalance, User user) {
+        this.name = name;
+        this.type = type;
+        this.openingBalance = openingBalance;
+        this.user = user;
+    }
+
     protected Account() {
         // Required by JPA when it creates an entity from a database row.
     }
 
-    public Account(String name, String type, BigDecimal openingBalance) {
-        this.name = name;
-        this.type = type;
-        this.openingBalance = openingBalance;
+    public User getUser() {
+        return user;
     }
 
     public void setName(String name) {

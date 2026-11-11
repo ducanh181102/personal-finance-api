@@ -14,11 +14,7 @@ public class UpdateBudgetRequest {
             fraction = 2,
             message = "Ngân sách tối đa 17 chữ số phần nguyên và 2 chữ số thập phân"
     )
-    private BigDecimal limitAmount;
-
-    public void setLimitAmount(BigDecimal limitAmount) {
-        this.limitAmount = limitAmount;
-    }
+    private final BigDecimal limitAmount;
 
     public BigDecimal getLimitAmount() {
         return limitAmount;

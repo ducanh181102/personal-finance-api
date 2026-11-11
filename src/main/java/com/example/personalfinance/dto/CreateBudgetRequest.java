@@ -10,9 +10,9 @@ import java.time.LocalDate;
 public class CreateBudgetRequest {
     @NotNull(message = "ID danh mục không được để trống")
     @Positive(message = "ID danh mục phải lớn hơn 0")
-    private Integer categoryId;
+    private final Integer categoryId;
     @NotNull(message = "Tháng không được trống")
-    private LocalDate month;
+    private final LocalDate month;
     @NotNull(message = "Ngân sách không được trống")
     @Positive(message = "Ngân sách phải là số dương")
     @Digits(
@@ -20,19 +20,7 @@ public class CreateBudgetRequest {
             fraction = 2,
             message = "Ngân sách tối đa 17 chữ số phần nguyên và 2 chữ số thập phân"
     )
-    private BigDecimal limitAmount;
-
-    public void setCategoryId(Integer categoryId) {
-        this.categoryId = categoryId;
-    }
-
-    public void setMonth(LocalDate month) {
-        this.month = month;
-    }
-
-    public void setLimitAmount(BigDecimal limitAmount) {
-        this.limitAmount = limitAmount;
-    }
+    private final BigDecimal limitAmount;
 
     public Integer getCategoryId() {
         return categoryId;

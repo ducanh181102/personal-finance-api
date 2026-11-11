@@ -5,15 +5,19 @@ import com.example.personalfinance.model.Budget;
 import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.model.TransactionType;
+import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.AccountRepository;
 import com.example.personalfinance.repository.BudgetRepository;
 import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.TransactionRepository;
+import com.example.personalfinance.repository.UserRepository;
+import com.example.personalfinance.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,16 +53,24 @@ class BudgetSummaryTest {
     @Autowired
     private TransactionRepository transactionRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtService jwtService;
+
+    private User user;
     private Account account;
     private Category expenseCategory;
 
     @BeforeEach
     void setUp() {
+        user = userRepository.save(new User("User kiểm thử", "budget-summary@example.com", "password-hash"));
         account = accountRepository.save(
-                new Account("Ví test budget", "CASH", BigDecimal.valueOf(500_000))
+                new Account("Ví test budget", "CASH", BigDecimal.valueOf(500_000), user)
         );
         expenseCategory = categoryRepository.save(
-                new Category("Ăn uống", TransactionType.EXPENSE)
+                new Category("Ăn uống", TransactionType.EXPENSE, user)
         );
     }
 
@@ -79,7 +91,8 @@ class BudgetSummaryTest {
                         "Chi đầu tháng sau", expenseCategory)
         ));
 
-        mockMvc.perform(get("/api/budgets/{id}/summary", budget.getId()))
+        mockMvc.perform(get("/api/budgets/{id}/summary", budget.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.budgetId").value(budget.getId()))
                 .andExpect(jsonPath("$.month").value(BUDGET_MONTH.toString()))

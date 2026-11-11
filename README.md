@@ -12,6 +12,8 @@ REST API quản lý tài khoản cá nhân, giao dịch thu chi, danh mục và 
 | Spring Data JPA / Hibernate | Ánh xạ entity và truy cập database |
 | H2 | Database file cục bộ |
 | Jakarta Validation | Validation dữ liệu đầu vào |
+| Spring Security | Bảo vệ endpoint và phân quyền theo user sở hữu dữ liệu |
+| JJWT | Tạo, kiểm tra JWT Bearer token |
 | Maven Wrapper | Build và chạy kiểm thử |
 
 ## Chạy dự án
@@ -26,9 +28,47 @@ cd personal-finance-api
 
 Trên Windows dùng `mvnw.cmd spring-boot:run`. Ứng dụng mặc định chạy tại `http://localhost:8080`.
 
-```bash
-curl http://localhost:8080/api/health
+## Xác thực và phân quyền
+
+Đăng ký, đăng nhập và khôi phục tài khoản là endpoint public. Tất cả endpoint dữ liệu khác cần JWT trong header:
+
+```http
+Authorization: Bearer <accessToken>
 ```
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| POST | `/api/users` | Đăng ký user | 201 |
+| POST | `/api/auth/login` | Đăng nhập, nhận JWT | 200 |
+| POST | `/api/auth/reactivate` | Khôi phục user đã vô hiệu hóa | 200 |
+| GET | `/api/users/me` | Xem user hiện tại | 200 |
+| PATCH | `/api/users/me` | Cập nhật user hiện tại | 200 |
+| DELETE | `/api/users/me` | Vô hiệu hóa user hiện tại | 204 |
+
+Ví dụ đăng ký:
+
+```json
+{
+  "name": "Đức Anh",
+  "email": "anh@example.com",
+  "password": "mat-khau-cua-ban"
+}
+```
+
+Ví dụ đăng nhập:
+
+```json
+{
+  "email": "anh@example.com",
+  "password": "mat-khau-cua-ban"
+}
+```
+
+Response login chứa `accessToken` và thông tin user, không bao giờ trả về `passwordHash`.
+
+User chỉ có thể xem, tạo, sửa hoặc xóa Account, Category, Transaction và Budget thuộc chính họ. Không có token, token sai/hết hạn trả `401`; có token nhưng truy cập dữ liệu của user khác trả `403`.
+
+`DELETE /api/users/me` là **soft delete**: đặt `active = false`, không xóa lịch sử tài chính. Token cũ bị từ chối; user có thể dùng `/api/auth/reactivate` với email và mật khẩu cũ để nhận token mới.
 
 ## Luồng dữ liệu
 
@@ -120,6 +160,20 @@ GET /api/transactions/page?accountId=1&from=2026-11-01&to=2026-11-30&page=0&size
 
 Khi lọc ngày, phải gửi đầy đủ `accountId`, `from` và `to`. Cả ngày bắt đầu và kết thúc đều được tính. `page` bắt đầu từ `0`; `size` nằm trong khoảng `1` đến `100`.
 
+Response phân trang có cấu trúc ổn định:
+
+```json
+{
+  "content": [],
+  "page": 0,
+  "size": 10,
+  "totalElements": 0,
+  "totalPages": 0,
+  "first": true,
+  "last": true
+}
+```
+
 ### Báo cáo tài khoản
 
 | Method | Đường dẫn | Dữ liệu trả về |
@@ -180,6 +234,7 @@ Ví dụ response summary:
 - Category của transaction phải có type trùng với transaction.
 - Không thể tạo budget cho category `INCOME`.
 - `from` không được sau `to`.
+- Không thể xóa Account hoặc Category đã có Transaction.
 
 Validation hoặc lỗi nghiệp vụ trả `400 Bad Request`, ví dụ:
 
@@ -218,16 +273,23 @@ Các test hiện kiểm tra:
 - Báo cáo theo kỳ tính đúng thu, chi và chênh lệch.
 - Khoảng ngày không hợp lệ trả `400`.
 - Budget summary tính đúng tổng chi, phần trăm sử dụng, trạng thái vượt hạn mức và không lấy giao dịch của tháng sau.
+- JWT bắt buộc cho API protected, owner truy cập được dữ liệu của mình và user khác nhận `403`.
+- List/pagination không làm lộ Transaction hoặc Budget của user khác.
+- Không thể xóa Account đã có Transaction; Account trống xóa thành công.
+- Soft delete từ chối token cũ; khôi phục user trả token mới dùng được.
 
 ## Cấu trúc source
 
 ```text
 src/main/java/com/example/personalfinance/
 ├── controller/   # HTTP request/response
+├── config/       # PasswordEncoder và Spring Security configuration
 ├── dto/          # Request DTO, validation, response DTO
 ├── exception/    # Xử lý lỗi chung
+├── mapper/       # Chuyển entity thành response DTO
 ├── model/        # JPA entities
 ├── repository/   # Spring Data JPA
+├── security/     # JWT service và authentication filter
 └── service/      # Nghiệp vụ
 ```
 

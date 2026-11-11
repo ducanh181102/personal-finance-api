@@ -4,11 +4,9 @@ import com.example.personalfinance.dto.AccountBalanceResponse;
 import com.example.personalfinance.dto.AccountPeriodSummaryResponse;
 import com.example.personalfinance.dto.AccountSummaryResponse;
 import com.example.personalfinance.dto.CategorySummaryResponse;
+import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
-import com.example.personalfinance.model.Account;
-import com.example.personalfinance.model.Category;
-import com.example.personalfinance.model.Transaction;
-import com.example.personalfinance.model.TransactionType;
+import com.example.personalfinance.model.*;
 import com.example.personalfinance.repository.TransactionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,27 +28,36 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final AccountService accountService;
     private final CategoryService categoryService;
+    private final CurrentUserService currentUserService;
 
-    public TransactionService(TransactionRepository transactionRepository, AccountService accountService, CategoryService categoryService) {
+    public TransactionService(TransactionRepository transactionRepository, AccountService accountService, CategoryService categoryService, CurrentUserService currentUserService) {
         this.transactionRepository = transactionRepository;
         this.accountService = accountService;
         this.categoryService = categoryService;
+        this.currentUserService = currentUserService;
+    }
+
+    private Transaction getOwnedTransactionById(int id) {
+        User currentUser = currentUserService.getCurrentUser();
+        Optional<Transaction> transaction = transactionRepository.findById(id);
+        if (transaction.isEmpty()) throw new NotFoundException(id);
+        if (transaction.get().getCategory().getUser().getId() != currentUser.getId())
+            throw new ForbiddenException("Không có quyền truy cập.");
+        return transaction.get();
     }
 
     public List<Transaction> getAllTransactions() {
-        return transactionRepository.findAll();
+        User currentUser = currentUserService.getCurrentUser();
+        return transactionRepository.findByAccountUserId(currentUser.getId());
     }
 
     public Transaction getTransactionById(int id) {
-        Optional<Transaction> transaction = transactionRepository.findById(id);
-        if (transaction.isEmpty()) {
-            throw new NotFoundException(id);
-        } else return transaction.get();
+        return getOwnedTransactionById(id);
     }
 
     @Transactional
     public Transaction updateTransaction(int id, BigDecimal amount, TransactionType type, String note) {
-        Transaction transaction = getTransactionById(id);
+        Transaction transaction = getOwnedTransactionById(id);
         transaction.setAmount(amount != null ? amount : transaction.getAmount());
         transaction.setNote(note != null ? note : transaction.getNote());
         if (type != null && type != transaction.getCategory().getType()) {
@@ -71,6 +78,10 @@ public class TransactionService {
                                          LocalDateTime transactionDate) {
         Account account = accountService.getAccountById(accountId);
         Category category = categoryService.findCategoryById(categoryId);
+
+        // Nghiệp vụ: kiểm tra account và category phải thuộc cùng 1 user
+        if (account.getUser().getId() != category.getUser().getId())
+            throw new IllegalArgumentException("Không cho giao dịch dùng category của user khác.");
         if (category.getType() != type)
             throw new IllegalArgumentException("Loại danh mục phải trùng với loại giao dịch");
         Transaction transaction = new Transaction(account, type, amount, transactionDate, note, category);
@@ -79,7 +90,7 @@ public class TransactionService {
 
     @Transactional
     public void deleteTransactionById(int id) {
-        Transaction transaction = getTransactionById(id);
+        Transaction transaction = getOwnedTransactionById(id);
         transactionRepository.delete(transaction);
     }
 
@@ -199,7 +210,8 @@ public class TransactionService {
                         Sort.Order.desc("id")
                 ));
         if (accountId == null) {
-            return transactionRepository.findAll(pageRequest);
+            User currentUser = currentUserService.getCurrentUser();
+            return transactionRepository.findByAccountUserId(currentUser.getId(), pageRequest);
         } else {
             accountService.getAccountById(accountId);
             return transactionRepository.findByAccountId(accountId, pageRequest);

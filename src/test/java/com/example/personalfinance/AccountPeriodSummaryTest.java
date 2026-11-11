@@ -4,14 +4,18 @@ import com.example.personalfinance.model.Account;
 import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.model.TransactionType;
+import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.AccountRepository;
 import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.TransactionRepository;
+import com.example.personalfinance.repository.UserRepository;
+import com.example.personalfinance.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,15 +48,23 @@ class AccountPeriodSummaryTest {
     @Autowired
     private CategoryRepository categoryRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtService jwtService;
+
+    private User user;
     private Account account;
     private Category incomeCategory;
     private Category expenseCategory;
 
     @BeforeEach
     void createAccount() {
-        account = accountRepository.save(new Account("Ví test", "CASH", BigDecimal.valueOf(500_000)));
-        incomeCategory = categoryRepository.save(new Category("Lương", TransactionType.INCOME));
-        expenseCategory = categoryRepository.save(new Category("Ăn uống", TransactionType.EXPENSE));
+        user = userRepository.save(new User("User kiểm thử", "period-summary@example.com", "password-hash"));
+        account = accountRepository.save(new Account("Ví test", "CASH", BigDecimal.valueOf(500_000), user));
+        incomeCategory = categoryRepository.save(new Category("Lương", TransactionType.INCOME, user));
+        expenseCategory = categoryRepository.save(new Category("Ăn uống", TransactionType.EXPENSE, user));
     }
 
     @Test
@@ -67,6 +79,7 @@ class AccountPeriodSummaryTest {
         ));
 
         mockMvc.perform(get("/api/accounts/{id}/period-summary", account.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user))
                         .param("from", REPORT_DATE.toString())
                         .param("to", REPORT_DATE.toString()))
                 .andExpect(status().isOk())
@@ -81,6 +94,7 @@ class AccountPeriodSummaryTest {
     @Test
     void rejectsAStartDateAfterTheEndDate() throws Exception {
         mockMvc.perform(get("/api/accounts/{id}/period-summary", account.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user))
                         .param("from", REPORT_DATE.plusDays(1).toString())
                         .param("to", REPORT_DATE.toString()))
                 .andExpect(status().isBadRequest())

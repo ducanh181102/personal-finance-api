@@ -1,6 +1,7 @@
 package com.example.personalfinance.controller;
 
 import com.example.personalfinance.dto.*;
+import com.example.personalfinance.mapper.AccountMapper;
 import com.example.personalfinance.model.Account;
 import com.example.personalfinance.service.AccountService;
 import com.example.personalfinance.service.TransactionService;
@@ -16,23 +17,27 @@ import java.util.List;
 @RequestMapping("/api/accounts")
 public class AccountController {
     private final TransactionService transactionService;
+    private final AccountMapper accountMapper;
 
-    public AccountController(AccountService accountService, TransactionService transactionService) {
-        this.accountService = accountService;
+    public AccountController(TransactionService transactionService, AccountMapper accountMapper, AccountService accountService) {
         this.transactionService = transactionService;
+        this.accountMapper = accountMapper;
+        this.accountService = accountService;
     }
 
     private final AccountService accountService;
 
     @GetMapping
-    public List<Account> getAllAccounts() {
-        return accountService.getAllAccounts();
+    public List<AccountResponse> getAllAccounts() {
+        return accountService.getAllAccounts().stream().map(
+                accountMapper::toAccountResponse
+        ).toList();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Account> getAccountById(@PathVariable("id") int id) {
+    public ResponseEntity<AccountResponse> getAccountById(@PathVariable("id") int id) {
         Account account = accountService.getAccountById(id);
-        return ResponseEntity.ok(account);
+        return ResponseEntity.ok(accountMapper.toAccountResponse(account));
     }
 
     @GetMapping("/{id}/balance")
@@ -69,14 +74,14 @@ public class AccountController {
     }
 
     @PostMapping
-    public ResponseEntity<Account> createAccount(@Valid @RequestBody CreateAccountRequest request) {
+    public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
         Account account = accountService.createAccount(request.getName(), request.getType(), request.getOpeningBalance());
-        return ResponseEntity.status(HttpStatus.CREATED).body(account);
+        return ResponseEntity.status(HttpStatus.CREATED).body(accountMapper.toAccountResponse(account));
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<Account> updateAccount(@PathVariable("id") int id, @Valid @RequestBody UpdateAccountNameRequest request) {
+    public ResponseEntity<AccountResponse> updateAccount(@PathVariable("id") int id, @Valid @RequestBody UpdateAccountNameRequest request) {
         Account account = accountService.updateAccountById(id, request.getName());
-        return ResponseEntity.ok(account);
+        return ResponseEntity.ok(accountMapper.toAccountResponse(account));
     }
 }

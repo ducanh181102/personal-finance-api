@@ -25,7 +25,7 @@ public class Budget {
         this.limitAmount = limitAmount;
     }
 
-    public Budget() {
+    protected Budget() {
     }
 
     public int getId() {

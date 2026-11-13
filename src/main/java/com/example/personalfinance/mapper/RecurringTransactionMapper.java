@@ -1,6 +1,6 @@
 package com.example.personalfinance.mapper;
 
-import com.example.personalfinance.dto.RecurringTransactionResponse;
+import com.example.personalfinance.dto.recurring.RecurringTransactionResponse;
 import com.example.personalfinance.model.RecurringTransaction;
 import org.springframework.stereotype.Component;
 

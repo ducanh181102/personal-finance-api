@@ -1,9 +1,9 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.CreateTransactionRequest;
-import com.example.personalfinance.dto.PageResponse;
-import com.example.personalfinance.dto.TransactionResponse;
-import com.example.personalfinance.dto.UpdateTransactionRequest;
+import com.example.personalfinance.dto.common.PageResponse;
+import com.example.personalfinance.dto.transaction.CreateTransactionRequest;
+import com.example.personalfinance.dto.transaction.TransactionResponse;
+import com.example.personalfinance.dto.transaction.UpdateTransactionRequest;
 import com.example.personalfinance.mapper.TransactionMapper;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.service.TransactionService;
@@ -49,7 +49,7 @@ public class TransactionController {
             throw new IllegalArgumentException("Kích thước tối đa của 1 trang phải nằm trong khoảng từ 1 đến 100");
         }
 
-        Page<Transaction> transactions = from != null ? transactionService.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThanPage(page, size, accountId, from, to) :
+        Page<Transaction> transactions = from != null ? transactionService.findPageByAccountIdWithinPeriod(page, size, accountId, from, to) :
                 transactionService.getTransactionsPage(page, size, accountId);
 
         Page<TransactionResponse> responsePage =
@@ -78,7 +78,7 @@ public class TransactionController {
         }
 
         List<Transaction> transactions = accountId == null ? transactionService.getAllTransactions() : from != null ?
-                transactionService.findByAccountIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(accountId, from, to) :
+                transactionService.findByAccountIdWithinPeriod(accountId, from, to) :
                 transactionService.getTransactionsByAccountId(accountId);
 
         return transactions.stream().map(transactionMapper::toTransactionResponse).toList();

@@ -1,8 +1,8 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.CategoryResponse;
-import com.example.personalfinance.dto.CreateCategoryRequest;
-import com.example.personalfinance.dto.UpdateCategoryRequest;
+import com.example.personalfinance.dto.category.CategoryResponse;
+import com.example.personalfinance.dto.category.CreateCategoryRequest;
+import com.example.personalfinance.dto.category.UpdateCategoryRequest;
 import com.example.personalfinance.mapper.CategoryMapper;
 import com.example.personalfinance.model.Category;
 import com.example.personalfinance.service.CategoryService;

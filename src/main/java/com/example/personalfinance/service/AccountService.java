@@ -4,9 +4,7 @@ import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Account;
 import com.example.personalfinance.model.User;
-import com.example.personalfinance.repository.AccountRepository;
-import com.example.personalfinance.repository.RecurringTransactionRepository;
-import com.example.personalfinance.repository.TransactionRepository;
+import com.example.personalfinance.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,12 +17,19 @@ public class AccountService {
     private final CurrentUserService currentUserService;
     private final TransactionRepository transactionRepository;
     private final RecurringTransactionRepository recurringTransactionRepository;
+    private final TransferRepository transferRepository;
+    private final DebtPaymentRepository debtPaymentRepository;
 
-    public AccountService(AccountRepository accountRepository, CurrentUserService currentUserService, TransactionRepository transactionRepository, RecurringTransactionRepository recurringTransactionRepository) {
+    public AccountService(AccountRepository accountRepository,
+                          CurrentUserService currentUserService,
+                          TransactionRepository transactionRepository,
+                          RecurringTransactionRepository recurringTransactionRepository, TransferRepository transferRepository, DebtPaymentRepository debtPaymentRepository) {
         this.accountRepository = accountRepository;
         this.currentUserService = currentUserService;
         this.transactionRepository = transactionRepository;
         this.recurringTransactionRepository = recurringTransactionRepository;
+        this.transferRepository = transferRepository;
+        this.debtPaymentRepository = debtPaymentRepository;
     }
 
     private final AccountRepository accountRepository;
@@ -68,7 +73,10 @@ public class AccountService {
             throw new IllegalArgumentException("Không được xóa tài khoản đã có giao dịch.");
         if (recurringTransactionRepository.existsByAccountId(id))
             throw new IllegalArgumentException("Không được xóa tài khoản đang được dùng bởi giao dịch định kỳ.");
-
+        if (transferRepository.existsByFromAccountIdOrToAccountId(id, id))
+            throw new IllegalArgumentException("Không được xóa tài khoản đã có giao dịch chuyển tiền.");
+        if (debtPaymentRepository.existsByAccountId(id))
+            throw new IllegalArgumentException("Không được xóa tài khoản đã có thanh toán nợ.");
         accountRepository.delete(account);
     }
 

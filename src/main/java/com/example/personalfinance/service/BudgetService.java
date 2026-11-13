@@ -1,6 +1,6 @@
 package com.example.personalfinance.service;
 
-import com.example.personalfinance.dto.BudgetSummaryResponse;
+import com.example.personalfinance.dto.budget.BudgetSummaryResponse;
 import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.*;
@@ -84,7 +84,7 @@ public class BudgetService {
         LocalDate to = from.withDayOfMonth(from.lengthOfMonth());
 
         // Lấy danh sách giao dịch
-        List<Transaction> transactions = transactionService.findByCategoryIdAndTransactionDateGreaterThanEqualAndTransactionDateLessThan(budget.getCategory().getId(), from, to);
+        List<Transaction> transactions = transactionService.findByCategoryIdWithinPeriod(budget.getCategory().getId(), from, to);
 
         BigDecimal spentAmount = transactions.stream().map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
 

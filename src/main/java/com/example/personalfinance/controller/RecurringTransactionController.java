@@ -1,8 +1,8 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.CreateRecurringTransactionRequest;
-import com.example.personalfinance.dto.RecurringTransactionResponse;
-import com.example.personalfinance.dto.UpdateRecurringTransactionRequest;
+import com.example.personalfinance.dto.recurring.CreateRecurringTransactionRequest;
+import com.example.personalfinance.dto.recurring.RecurringTransactionResponse;
+import com.example.personalfinance.dto.recurring.UpdateRecurringTransactionRequest;
 import com.example.personalfinance.mapper.RecurringTransactionMapper;
 import com.example.personalfinance.service.RecurringTransactionService;
 import jakarta.validation.Valid;

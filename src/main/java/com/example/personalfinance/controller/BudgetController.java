@@ -1,8 +1,8 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.BudgetSummaryResponse;
-import com.example.personalfinance.dto.CreateBudgetRequest;
-import com.example.personalfinance.dto.UpdateBudgetRequest;
+import com.example.personalfinance.dto.budget.BudgetSummaryResponse;
+import com.example.personalfinance.dto.budget.CreateBudgetRequest;
+import com.example.personalfinance.dto.budget.UpdateBudgetRequest;
 import com.example.personalfinance.model.Budget;
 import com.example.personalfinance.service.BudgetService;
 import jakarta.validation.Valid;

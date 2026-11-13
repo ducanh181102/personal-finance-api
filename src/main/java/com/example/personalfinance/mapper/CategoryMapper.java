@@ -1,6 +1,6 @@
 package com.example.personalfinance.mapper;
 
-import com.example.personalfinance.dto.CategoryResponse;
+import com.example.personalfinance.dto.category.CategoryResponse;
 import com.example.personalfinance.model.Category;
 import org.springframework.stereotype.Component;
 

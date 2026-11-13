@@ -5,8 +5,8 @@ import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.*;
 import com.example.personalfinance.repository.RecurringTransactionRepository;
 import com.example.personalfinance.repository.TransactionRepository;
-import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

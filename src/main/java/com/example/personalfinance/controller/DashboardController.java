@@ -1,6 +1,6 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.MonthlyDashboardResponse;
+import com.example.personalfinance.dto.dashboard.MonthlyDashboardResponse;
 import com.example.personalfinance.service.DashboardService;
 import org.springframework.web.bind.annotation.*;
 

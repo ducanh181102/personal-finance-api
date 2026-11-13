@@ -1,6 +1,6 @@
 package com.example.personalfinance.mapper;
 
-import com.example.personalfinance.dto.TransactionResponse;
+import com.example.personalfinance.dto.transaction.TransactionResponse;
 import com.example.personalfinance.model.Transaction;
 import org.springframework.stereotype.Component;
 

@@ -1,9 +1,9 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.LoginRequest;
-import com.example.personalfinance.dto.LoginResponse;
-import com.example.personalfinance.dto.ReactivateRequest;
-import com.example.personalfinance.dto.ReactivateResponse;
+import com.example.personalfinance.dto.auth.LoginRequest;
+import com.example.personalfinance.dto.auth.LoginResponse;
+import com.example.personalfinance.dto.auth.ReactivateRequest;
+import com.example.personalfinance.dto.auth.ReactivateResponse;
 import com.example.personalfinance.mapper.UserMapper;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.security.JwtService;

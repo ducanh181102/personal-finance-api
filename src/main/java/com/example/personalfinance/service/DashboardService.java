@@ -1,7 +1,7 @@
 package com.example.personalfinance.service;
 
-import com.example.personalfinance.dto.BudgetSummaryResponse;
-import com.example.personalfinance.dto.MonthlyDashboardResponse;
+import com.example.personalfinance.dto.budget.BudgetSummaryResponse;
+import com.example.personalfinance.dto.dashboard.MonthlyDashboardResponse;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.model.TransactionType;
 import com.example.personalfinance.model.User;

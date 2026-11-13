@@ -1,10 +1,11 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.*;
+import com.example.personalfinance.dto.account.*;
+import com.example.personalfinance.dto.category.CategorySummaryResponse;
 import com.example.personalfinance.mapper.AccountMapper;
 import com.example.personalfinance.model.Account;
+import com.example.personalfinance.service.AccountBalanceService;
 import com.example.personalfinance.service.AccountService;
-import com.example.personalfinance.service.TransactionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,13 +17,13 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
-    private final TransactionService transactionService;
     private final AccountMapper accountMapper;
+    private final AccountBalanceService accountBalanceService;
 
-    public AccountController(TransactionService transactionService, AccountMapper accountMapper, AccountService accountService) {
-        this.transactionService = transactionService;
+    public AccountController(AccountMapper accountMapper, AccountService accountService, AccountBalanceService accountBalanceService) {
         this.accountMapper = accountMapper;
         this.accountService = accountService;
+        this.accountBalanceService = accountBalanceService;
     }
 
     private final AccountService accountService;
@@ -42,13 +43,13 @@ public class AccountController {
 
     @GetMapping("/{id}/balance")
     public ResponseEntity<AccountBalanceResponse> getCurrentBalanceByAccountId(@PathVariable("id") int id) {
-        AccountBalanceResponse accountBalanceResponse = transactionService.getCurrentBalanceByAccountId(id);
+        AccountBalanceResponse accountBalanceResponse = accountBalanceService.getCurrentBalanceByAccountId(id);
         return ResponseEntity.ok(accountBalanceResponse);
     }
 
     @GetMapping("/{id}/summary")
     public ResponseEntity<AccountSummaryResponse> getSummaryByAccountId(@PathVariable("id") int id) {
-        AccountSummaryResponse summaryResponse = transactionService.getAccountSummaryByAccountId(id);
+        AccountSummaryResponse summaryResponse = accountBalanceService.getAccountSummaryByAccountId(id);
         return ResponseEntity.ok(summaryResponse);
     }
 
@@ -56,7 +57,7 @@ public class AccountController {
     public ResponseEntity<AccountPeriodSummaryResponse> getAccountPeriodSummaryByAccountId(@PathVariable("id") int id,
                                                                                            @RequestParam("from") LocalDate from,
                                                                                            @RequestParam("to") LocalDate to) {
-        AccountPeriodSummaryResponse periodSummary = transactionService.getAccountPeriodSummary(id, from, to);
+        AccountPeriodSummaryResponse periodSummary = accountBalanceService.getAccountPeriodSummary(id, from, to);
         return ResponseEntity.ok(periodSummary);
     }
 
@@ -64,7 +65,7 @@ public class AccountController {
     public List<CategorySummaryResponse> getCategorySummaryByAccountId(@PathVariable("id") int id,
                                                                        @RequestParam("from") LocalDate from,
                                                                        @RequestParam("to") LocalDate to) {
-        return transactionService.getCategorySummaryByAccountId(id, from, to);
+        return accountBalanceService.getCategorySummaryByAccountId(id, from, to);
     }
 
     @DeleteMapping("/{id}")

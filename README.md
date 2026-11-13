@@ -1,6 +1,6 @@
 # Personal Finance API
 
-REST API quản lý tài khoản cá nhân, giao dịch thu chi, danh mục và ngân sách theo tháng. Đây là đồ án học Java, Spring Boot, JPA/Hibernate và REST API.
+REST API quản lý tài chính cá nhân: tài khoản, giao dịch thu chi, ngân sách, giao dịch định kỳ, chuyển tiền nội bộ, mục tiêu tiết kiệm và công nợ. Đây là đồ án học Java, Spring Boot, JPA/Hibernate và REST API.
 
 ## Công nghệ
 
@@ -66,18 +66,24 @@ Ví dụ đăng nhập:
 
 Response login chứa `accessToken` và thông tin user, không bao giờ trả về `passwordHash`.
 
-User chỉ có thể xem, tạo, sửa hoặc xóa Account, Category, Transaction và Budget thuộc chính họ. Không có token, token sai/hết hạn trả `401`; có token nhưng truy cập dữ liệu của user khác trả `403`.
+User chỉ có thể xem, tạo, sửa hoặc xóa dữ liệu thuộc chính họ: Account, Category, Transaction, Budget, Transfer, Savings Goal, Goal Contribution, Debt và Debt Payment. Không có token, token sai/hết hạn trả `401`; có token nhưng truy cập dữ liệu của user khác trả `403`.
 
 `DELETE /api/users/me` là **soft delete**: đặt `active = false`, không xóa lịch sử tài chính. Token cũ bị từ chối; user có thể dùng `/api/auth/reactivate` với email và mật khẩu cũ để nhận token mới.
 
 ## Luồng dữ liệu
 
 ```text
-Account ──< Transaction >── Category
-   │                          │
-   └──< RecurringTransaction >┘
-                              │
-                              └──< Budget (một category, một tháng)
+User ──< Account ──< Transaction >── Category
+  │       │                           │
+  │       ├──< RecurringTransaction >─┘
+  │       ├──< Transfer (gửi / nhận) >── Account
+  │       ├──< GoalContribution >── SavingsGoal
+  │       └──< DebtPayment >── Debt
+  │
+  ├──< SavingsGoal
+  └──< Debt
+
+Category ──< Budget (một category, một tháng)
 ```
 
 - `TransactionType` chỉ có `INCOME` và `EXPENSE`.
@@ -85,6 +91,9 @@ Account ──< Transaction >── Category
 - Chỉ category `EXPENSE` mới tạo được budget.
 - Budget không lưu số tiền đã chi; số tiền này luôn được tính từ các transaction.
 - `RecurringTransaction` là mẫu giao dịch lặp lại; nó sinh ra `Transaction` thật khi đến hạn.
+- `Transfer` di chuyển tiền giữa hai Account cùng thuộc một user.
+- `SavingsGoal` theo dõi một mục tiêu tiết kiệm; `GoalContribution` là từng lần góp vào mục tiêu.
+- `Debt` theo dõi khoản cho mượn hoặc đi vay; `DebtPayment` là từng lần thanh toán.
 
 ## API
 
@@ -126,6 +135,27 @@ Tất cả request có body JSON cần header `Content-Type: application/json`.
 ```
 
 Category đang được transaction sử dụng không thể bị xóa. Type của category đang được sử dụng cũng không thể đổi, vì sẽ làm dữ liệu transaction cũ bị lệch nghiệp vụ.
+
+### Transfer
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/transfers` | Danh sách giao dịch chuyển tiền | 200 |
+| GET | `/api/transfers/{id}` | Xem một giao dịch chuyển tiền | 200 |
+| POST | `/api/transfers` | Chuyển tiền giữa hai account | 201 |
+| DELETE | `/api/transfers/{id}` | Xóa bản ghi chuyển tiền nhập sai | 204 |
+
+```json
+{
+  "fromAccountId": 1,
+  "toAccountId": 2,
+  "amount": 200000,
+  "transferDate": "2026-11-10T10:00:00",
+  "note": "Chuyển sang ví ngân hàng"
+}
+```
+
+Hai account phải cùng thuộc user hiện tại và không được trùng nhau. Transfer không có `PATCH`; nếu nhập sai thì xóa và tạo lại. Khi tính số dư, account gửi bị trừ và account nhận được cộng số tiền transfer.
 
 ### Transaction
 
@@ -219,6 +249,12 @@ Scheduler tự chạy khi ứng dụng khởi động và mỗi ngày lúc `00:0
 GET /api/accounts/1/category-summary?from=2026-11-01&to=2026-11-30
 ```
 
+Số dư hiện tại của account được tính theo công thức:
+
+```text
+openingBalance + income - expense + transferIn - transferOut
+```
+
 ### Budget
 
 | Method | Đường dẫn | Chức năng | Status thành công |
@@ -259,6 +295,94 @@ Ví dụ response summary:
 
 `spentAmount` là tổng giao dịch của category trong tháng. `remainingAmount = limitAmount - spentAmount`; `overBudget` là `true` khi số đã chi lớn hơn hạn mức.
 
+### Savings Goal
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/savings-goals` | Danh sách mục tiêu tiết kiệm | 200 |
+| GET | `/api/savings-goals/{id}` | Xem một mục tiêu | 200 |
+| POST | `/api/savings-goals` | Tạo mục tiêu | 201 |
+| PATCH | `/api/savings-goals/{id}` | Đổi tên, số tiền mục tiêu hoặc hạn hoàn thành | 200 |
+| DELETE | `/api/savings-goals/{id}` | Xóa mục tiêu chưa có khoản góp | 204 |
+
+```json
+{
+  "name": "Mua laptop",
+  "targetAmount": 25000000,
+  "deadline": "2027-06-01"
+}
+```
+
+`currentAmount` và `completed` do hệ thống quản lý, client không được sửa trực tiếp. Khi `currentAmount >= targetAmount`, mục tiêu chuyển sang `completed = true`.
+
+### Goal Contribution
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/goal-contributions` | Danh sách các lần góp | 200 |
+| GET | `/api/goal-contributions/{id}` | Xem một lần góp | 200 |
+| POST | `/api/goal-contributions` | Góp tiền vào mục tiêu | 201 |
+| DELETE | `/api/goal-contributions/{id}` | Xóa lần góp nhập sai | 204 |
+
+```json
+{
+  "savingsGoalId": 1,
+  "accountId": 1,
+  "amount": 500000,
+  "contributedAt": "2026-11-10T10:00:00",
+  "note": "Góp tháng 11"
+}
+```
+
+Tạo contribution làm tăng `currentAmount`; xóa contribution làm giảm lại giá trị này. Mục tiêu đã có contribution không thể xóa cho đến khi xóa hết các contribution liên quan.
+
+### Debt
+
+`DebtType` gồm `LENT` (người khác nợ mình) và `BORROWED` (mình nợ người khác). `DebtStatus` gồm `OPEN` và `PAID`.
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/debts` | Danh sách khoản nợ | 200 |
+| GET | `/api/debts/{id}` | Xem một khoản nợ | 200 |
+| POST | `/api/debts` | Tạo khoản nợ | 201 |
+| PATCH | `/api/debts/{id}` | Đổi người liên quan, hạn thanh toán hoặc ghi chú | 200 |
+| DELETE | `/api/debts/{id}` | Xóa debt chưa có payment | 204 |
+
+```json
+{
+  "personName": "Nam",
+  "type": "LENT",
+  "originalAmount": 2000000,
+  "dueDate": "2026-12-31",
+  "note": "Cho Nam mượn"
+}
+```
+
+Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAmount` và `type` không được sửa trực tiếp sau khi tạo.
+
+### Debt Payment
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/debt-payments` | Danh sách lần thanh toán nợ | 200 |
+| GET | `/api/debt-payments/{id}` | Xem một lần thanh toán | 200 |
+| POST | `/api/debt-payments` | Tạo lần thanh toán | 201 |
+| DELETE | `/api/debt-payments/{id}` | Xóa lần thanh toán nhập sai | 204 |
+
+```json
+{
+  "debtId": 1,
+  "accountId": 1,
+  "amount": 500000,
+  "paidAt": "2026-11-10T10:00:00",
+  "note": "Trả lần đầu"
+}
+```
+
+Mỗi payment làm giảm `remainingAmount`; không thể trả vượt số nợ còn lại. Khi remaining amount bằng `0`, debt chuyển `PAID`. Xóa payment sẽ cộng số tiền trở lại và đưa debt về `OPEN` nếu còn nợ.
+
+Ở phase hiện tại, Debt/Debt Payment dùng để theo dõi nghĩa vụ nợ và **chưa tự tạo Transaction hoặc làm thay đổi số dư Account**.
+
 ## Validation và lỗi
 
 - Các ID phải lớn hơn `0`.
@@ -266,7 +390,9 @@ Ví dụ response summary:
 - Category của transaction phải có type trùng với transaction.
 - Không thể tạo budget cho category `INCOME`.
 - `from` không được sau `to`.
-- Không thể xóa Account hoặc Category đã có Transaction hoặc đang được recurring transaction sử dụng.
+- Không thể xóa Account hoặc Category đã có dữ liệu đang tham chiếu đến chúng.
+- Không thể chuyển tiền sang account của user khác, góp tiền vào goal của user khác, hoặc thanh toán debt của user khác.
+- Không thể trả debt vượt `remainingAmount`.
 
 Validation hoặc lỗi nghiệp vụ trả `400 Bad Request`, ví dụ:
 
@@ -310,6 +436,9 @@ Các test hiện kiểm tra:
 - Không thể xóa Account đã có Transaction; Account trống xóa thành công.
 - Soft delete từ chối token cũ; khôi phục user trả token mới dùng được.
 - Recurring scheduler tạo bù đủ transaction bị lỡ, không xử lý mẫu đã tạm dừng và dời đúng `nextRunDate`.
+- Transfer làm số dư account gửi giảm, account nhận tăng; user khác không được dùng account không thuộc họ.
+- Savings Goal cập nhật số tiền góp và trạng thái hoàn thành; không thể xóa goal đã có contribution.
+- Debt Payment cập nhật số nợ còn lại, đóng/mở debt đúng lúc, chặn trả vượt nợ và chặn user khác truy cập.
 
 ## Cấu trúc source
 
@@ -317,7 +446,21 @@ Các test hiện kiểm tra:
 src/main/java/com/example/personalfinance/
 ├── controller/   # HTTP request/response
 ├── config/       # PasswordEncoder và Spring Security configuration
-├── dto/          # Request DTO, validation, response DTO
+├── dto/
+│   ├── account/      # DTO của account và báo cáo account
+│   ├── auth/         # Đăng nhập và khôi phục tài khoản
+│   ├── budget/       # DTO budget và budget summary
+│   ├── category/     # DTO category và category summary
+│   ├── common/       # DTO dùng chung, ví dụ PageResponse
+│   ├── dashboard/    # DTO tổng quan dashboard
+│   ├── debt/         # DTO khoản nợ
+│   ├── debtpayment/  # DTO thanh toán nợ
+│   ├── goalcontribution/ # DTO góp mục tiêu tiết kiệm
+│   ├── recurring/    # DTO giao dịch định kỳ
+│   ├── savingsgoal/  # DTO mục tiêu tiết kiệm
+│   ├── transaction/  # DTO giao dịch
+│   ├── transfer/     # DTO chuyển tiền
+│   └── user/         # DTO user
 ├── exception/    # Xử lý lỗi chung
 ├── mapper/       # Chuyển entity thành response DTO
 ├── model/        # JPA entities

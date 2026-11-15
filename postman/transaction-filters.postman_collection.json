@@ -1,0 +1,157 @@
+{
+  "info": {
+    "name": "Personal Finance API - Bộ lọc giao dịch (JWT)",
+    "description": "Kiểm thử GET /api/transactions/page với ví test 200 giao dịch. Điền test_email và test_password trong môi trường local, rồi gửi Đăng nhập để lưu JWT. Các request còn lại chỉ đọc dữ liệu.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "access_token", "value": "" },
+    { "key": "account_id", "value": "1" },
+    { "key": "sample_date", "value": "2026-11-13" },
+    { "key": "expected_day_count", "value": "4" },
+    { "key": "expected_total", "value": "200" }
+  ],
+  "item": [
+    {
+      "name": "01 - Đăng nhập và lưu JWT",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/api/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{escaped_test_email}}\",\n  \"password\": \"{{escaped_test_password}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        }
+      },
+      "event": [
+        { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+          "pm.collectionVariables.set('access_token', '');",
+          "const email = pm.variables.get('test_email');",
+          "const password = pm.variables.get('test_password');",
+          "if (!email || !password) {",
+          "    console.warn('Điền test_email và test_password trong môi trường local.');",
+          "    pm.execution.skipRequest();",
+          "} else {",
+          "    const escape = value => JSON.stringify(String(value)).slice(1, -1);",
+          "    pm.variables.set('escaped_test_email', escape(email));",
+          "    pm.variables.set('escaped_test_password', escape(password));",
+          "}"
+        ] } },
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [
+          "pm.test('Đăng nhập thành công và lưu JWT', () => {",
+          "    pm.response.to.have.status(200);",
+          "    const token = pm.response.json().accessToken;",
+          "    pm.expect(token).to.be.a('string').and.not.be.empty;",
+          "    pm.collectionVariables.set('access_token', token);",
+          "});"
+        ] } }
+      ]
+    },
+    {
+      "name": "02 - Lọc một ngày trong ví test (200)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/transactions/page?accountId={{account_id}}&from={{sample_date}}&to={{sample_date}}&size=100"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Đúng số giao dịch, ví và ngày', () => {",
+        "    pm.response.to.have.status(200);",
+        "    const page = pm.response.json();",
+        "    const count = Number(pm.variables.get('expected_day_count'));",
+        "    pm.expect(page.totalElements).to.eql(count);",
+        "    pm.expect(page.content).to.have.lengthOf(count);",
+        "    for (const transaction of page.content) {",
+        "        pm.expect(transaction.accountId).to.eql(Number(pm.variables.get('account_id')));",
+        "        pm.expect(transaction.transactionDate.slice(0, 10)).to.eql(pm.variables.get('sample_date'));",
+        "    }",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "03 - Lọc ngày không cần accountId (200)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/transactions/page?from={{sample_date}}&to={{sample_date}}&size=100"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Các giao dịch thuộc ngày đã chọn', () => {",
+        "    pm.response.to.have.status(200);",
+        "    const page = pm.response.json();",
+        "    pm.expect(page.totalElements).to.be.at.least(Number(pm.variables.get('expected_day_count')));",
+        "    for (const transaction of page.content) {",
+        "        pm.expect(transaction.transactionDate.slice(0, 10)).to.eql(pm.variables.get('sample_date'));",
+        "    }",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "04 - Ví test, trang 0 (200)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/transactions/page?accountId={{account_id}}&page=0&size=100"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Trang đầu có 100 trong tổng số 200 giao dịch mẫu', () => {",
+        "    pm.response.to.have.status(200);",
+        "    const page = pm.response.json();",
+        "    pm.expect(page.content).to.have.lengthOf(100);",
+        "    pm.expect(page.totalElements).to.eql(Number(pm.variables.get('expected_total')));",
+        "    pm.expect(page).to.include({ page: 0, totalPages: 2, first: true, last: false });",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "05 - Ví test, trang 1 (200)",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/transactions/page?accountId={{account_id}}&page=1&size=100"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Trang cuối có 100 trong tổng số 200 giao dịch mẫu', () => {",
+        "    pm.response.to.have.status(200);",
+        "    const page = pm.response.json();",
+        "    pm.expect(page.content).to.have.lengthOf(100);",
+        "    pm.expect(page.totalElements).to.eql(Number(pm.variables.get('expected_total')));",
+        "    pm.expect(page).to.include({ page: 1, totalPages: 2, first: false, last: true });",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "06 - Thiếu ngày kết thúc (400)",
+      "request": { "method": "GET", "url": "{{base_url}}/api/transactions/page?from={{sample_date}}" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('Thiếu to trả HTTP 400', () => {",
+        "    pm.response.to.have.status(400);",
+        "    pm.expect(pm.response.json().message).to.eql('Cần gửi cả ngày bắt đầu và ngày kết thúc.');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "07 - Khoảng ngày bị đảo (400)",
+      "request": { "method": "GET", "url": "{{base_url}}/api/transactions/page?from=2026-11-14&to=2026-11-13" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('from > to trả HTTP 400', () => {",
+        "    pm.response.to.have.status(400);",
+        "    pm.expect(pm.response.json().message).to.eql('Ngày bắt đầu không được sau ngày kết thúc.');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "08 - Khoảng tiền bị đảo (400)",
+      "request": { "method": "GET", "url": "{{base_url}}/api/transactions/page?minAmount=100000&maxAmount=50000" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('minAmount > maxAmount trả HTTP 400', () => {",
+        "    pm.response.to.have.status(400);",
+        "    pm.expect(pm.response.json().message).to.eql('Số tiền tối thiểu không được lớn hơn số tiền tối đa.');",
+        "});"
+      ] } }]
+    }
+  ]
+}

@@ -49,7 +49,7 @@ public class GoalContributionService {
     @Transactional
     public GoalContribution createGoalContribution(int savingsGoalId, int accountId, BigDecimal amount, LocalDateTime contributedAt, String note) {
         SavingsGoal goal = savingsGoalService.getSavingsGoal(savingsGoalId);
-        Account account = accountService.getAccountById(accountId);
+        Account account = accountService.getActiveAccountById(accountId);
 
         GoalContribution goalContribution = new GoalContribution(goal, account, amount, contributedAt, note);
 

@@ -13,11 +13,13 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final CurrentUserService currentUserService;
+    private final CategoryService categoryService;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, CurrentUserService currentUserService) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, CurrentUserService currentUserService, CategoryService categoryService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.currentUserService = currentUserService;
+        this.categoryService = categoryService;
     }
 
     private boolean isExistEmail(String email) {
@@ -48,7 +50,10 @@ public class UserService {
     public User createUser(String name, String email, String password) {
         if (isExistEmail(email)) throw new IllegalArgumentException("Email đã tồn tại.");
         String passwordHash = passwordEncoder.encode(password);
-        return userRepository.save(new User(name, email, passwordHash));
+        User user = userRepository.save(new User(name, email, passwordHash));
+        // Tạo category hệ thống
+        categoryService.ensureDebtSystemCategories(user);
+        return user;
     }
 
     @Transactional

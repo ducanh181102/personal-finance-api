@@ -6,6 +6,8 @@ import com.example.personalfinance.dto.transaction.TransactionResponse;
 import com.example.personalfinance.dto.transaction.UpdateTransactionRequest;
 import com.example.personalfinance.mapper.TransactionMapper;
 import com.example.personalfinance.model.Transaction;
+import com.example.personalfinance.model.TransactionSource;
+import com.example.personalfinance.model.TransactionType;
 import com.example.personalfinance.service.TransactionService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -13,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -30,27 +33,27 @@ public class TransactionController {
     @GetMapping("/page")
     public PageResponse<TransactionResponse> getTransactionsPage(
             @RequestParam(value = "accountId", required = false) Integer accountId,
+            @RequestParam(value = "categoryId", required = false) Integer categoryId,
+            @RequestParam(value = "type", required = false) TransactionType type,
+            @RequestParam(value = "source", required = false) TransactionSource source,
+            @RequestParam(value = "minAmount", required = false) BigDecimal minAmount,
+            @RequestParam(value = "maxAmount", required = false) BigDecimal maxAmount,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "sort", required = false, defaultValue = "DESC") String sort,
             @RequestParam(value = "from", required = false) LocalDate from,
             @RequestParam(value = "to", required = false) LocalDate to,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "10") int size) {
 
-        if ((from == null) != (to == null)) {
-            throw new IllegalArgumentException("Cần gửi cả ngày bắt đầu và ngày kết thúc");
-        }
-
-        if (from != null && accountId == null) {
-            throw new IllegalArgumentException("Cần gửi accountId khi lọc theo ngày");
-        }
-
-        if (page < 0) {
-            throw new IllegalArgumentException("Vị trí trang không được nhỏ hơn 0");
-        } else if (size < 1 || size > 100) {
-            throw new IllegalArgumentException("Kích thước tối đa của 1 trang phải nằm trong khoảng từ 1 đến 100");
-        }
-
-        Page<Transaction> transactions = from != null ? transactionService.findPageByAccountIdWithinPeriod(page, size, accountId, from, to) :
-                transactionService.getTransactionsPage(page, size, accountId);
+        Page<Transaction> transactions = transactionService.getTransactionsPage(page, size, accountId, categoryId,
+                type,
+                source,
+                minAmount,
+                maxAmount,
+                keyword,
+                sort,
+                from,
+                to);
 
         Page<TransactionResponse> responsePage =
                 transactions.map(transactionMapper::toTransactionResponse);
@@ -66,21 +69,8 @@ public class TransactionController {
     }
 
     @GetMapping
-    public List<TransactionResponse> getAllTransactions(@RequestParam(value = "accountId", required = false) Integer accountId,
-                                                        @RequestParam(value = "from", required = false) LocalDate from,
-                                                        @RequestParam(value = "to", required = false) LocalDate to) {
-        if ((from == null) != (to == null)) {
-            throw new IllegalArgumentException("Cần gửi cả ngày bắt đầu và ngày kết thúc");
-        }
-
-        if (from != null && accountId == null) {
-            throw new IllegalArgumentException("Cần gửi accountId khi lọc theo ngày");
-        }
-
-        List<Transaction> transactions = accountId == null ? transactionService.getAllTransactions() : from != null ?
-                transactionService.findByAccountIdWithinPeriod(accountId, from, to) :
-                transactionService.getTransactionsByAccountId(accountId);
-
+    public List<TransactionResponse> getAllTransactions() {
+        List<Transaction> transactions = transactionService.getAllTransactions();
         return transactions.stream().map(transactionMapper::toTransactionResponse).toList();
     }
 

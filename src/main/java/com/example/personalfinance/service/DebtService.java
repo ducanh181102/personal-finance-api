@@ -1,16 +1,20 @@
 package com.example.personalfinance.service;
 
+import com.example.personalfinance.dto.debt.DebtAlertResponse;
 import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Debt;
+import com.example.personalfinance.model.DebtStatus;
 import com.example.personalfinance.model.DebtType;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.DebtPaymentRepository;
 import com.example.personalfinance.repository.DebtRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -76,5 +80,38 @@ public class DebtService {
         if (debtPaymentRepository.existsByDebtId(id))
             throw new IllegalArgumentException("Không thể xoá nợ đã có thanh toán.");
         debtRepository.delete(debt);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DebtAlertResponse> getDebtAlerts(int days) {
+        if (days < 0) {
+            throw new IllegalArgumentException("Số ngày cảnh báo không được âm.");
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate lastAlertDate = today.plusDays(days);
+        List<Debt> debts = debtRepository.findByUserIdAndStatusAndDueDateLessThanEqualOrderByDueDateAsc(
+                currentUserService.getCurrentUser().getId(),
+                DebtStatus.OPEN,
+                lastAlertDate
+        );
+
+        return debts.stream().map(
+                debt -> {
+                    long daysUntilDue = ChronoUnit.DAYS.between(
+                            today,
+                            debt.getDueDate()
+                    );
+                    boolean overdue = daysUntilDue < 0;
+                    return new DebtAlertResponse(
+                            debt.getId(),
+                            debt.getPersonName(),
+                            debt.getType(),
+                            debt.getRemainingAmount(),
+                            debt.getDueDate(),
+                            daysUntilDue, overdue
+                    );
+                }
+        ).toList();
     }
 }

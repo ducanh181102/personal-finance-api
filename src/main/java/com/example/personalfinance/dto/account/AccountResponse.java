@@ -1,6 +1,7 @@
 package com.example.personalfinance.dto.account;
 
 import com.example.personalfinance.dto.user.UserResponse;
+import com.example.personalfinance.model.AccountStatus;
 
 import java.math.BigDecimal;
 
@@ -9,6 +10,7 @@ public class AccountResponse {
     private final String name;
     private final String type;
     private final BigDecimal openingBalance;
+    private final AccountStatus status;
     private final UserResponse user;
 
     public int getId() {
@@ -19,11 +21,13 @@ public class AccountResponse {
         return user;
     }
 
-    public AccountResponse(int id, String name, String type, BigDecimal openingBalance, UserResponse user) {
+    public AccountResponse(int id, String name, String type, BigDecimal openingBalance,
+                           AccountStatus status, UserResponse user) {
         this.id = id;
         this.name = name;
         this.type = type;
         this.openingBalance = openingBalance;
+        this.status = status;
         this.user = user;
     }
 
@@ -37,6 +41,10 @@ public class AccountResponse {
 
     public BigDecimal getOpeningBalance() {
         return openingBalance;
+    }
+
+    public AccountStatus getStatus() {
+        return status;
     }
 
 }

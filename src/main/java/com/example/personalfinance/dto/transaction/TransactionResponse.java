@@ -1,6 +1,7 @@
 package com.example.personalfinance.dto.transaction;
 
 import com.example.personalfinance.model.TransactionType;
+import com.example.personalfinance.model.TransactionSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ public class TransactionResponse {
     private final BigDecimal amount;
     private final LocalDateTime transactionDate;
     private final String note;
+    private final TransactionSource source;
 
     public int getId() {
         return id;
@@ -42,7 +44,11 @@ public class TransactionResponse {
         return note;
     }
 
-    public TransactionResponse(int id, int accountId, int categoryId, TransactionType type, BigDecimal amount, LocalDateTime transactionDate, String note) {
+    public TransactionSource getSource() {
+        return source;
+    }
+
+    public TransactionResponse(int id, int accountId, int categoryId, TransactionType type, BigDecimal amount, LocalDateTime transactionDate, String note, TransactionSource source) {
         this.id = id;
         this.accountId = accountId;
         this.categoryId = categoryId;
@@ -50,5 +56,6 @@ public class TransactionResponse {
         this.amount = amount;
         this.transactionDate = transactionDate;
         this.note = note;
+        this.source = source;
     }
 }

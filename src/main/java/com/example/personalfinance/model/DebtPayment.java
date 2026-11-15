@@ -1,13 +1,6 @@
 package com.example.personalfinance.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -36,6 +29,21 @@ public class DebtPayment {
     @Column(length = 255)
     private String note;
 
+    @OneToOne
+    @JoinColumn(nullable = false, name = "transaction_id")
+    private Transaction transaction;
+
+    @OneToOne
+    @JoinColumn(name = "reversal_transaction_id", unique = true)
+    private Transaction reversalTransaction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private DebtPaymentStatus status;
+
+    @Column
+    private LocalDateTime cancelledAt;
+
     protected DebtPayment() {
     }
 
@@ -43,12 +51,37 @@ public class DebtPayment {
                        Account account,
                        BigDecimal amount,
                        LocalDateTime paidAt,
-                       String note) {
+                       String note,
+                       Transaction transaction) {
         this.debt = debt;
         this.account = account;
         this.amount = amount;
         this.paidAt = paidAt;
         this.note = note;
+        this.transaction = transaction;
+        this.status = DebtPaymentStatus.COMPLETED;
+    }
+
+    public Transaction getTransaction() {
+        return transaction;
+    }
+
+    public Transaction getReversalTransaction() {
+        return reversalTransaction;
+    }
+
+    public DebtPaymentStatus getStatus() {
+        return status;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void cancelDebtPayment(Transaction reversalTransaction, LocalDateTime cancelledAt) {
+        this.status = DebtPaymentStatus.CANCELLED;
+        this.reversalTransaction = reversalTransaction;
+        this.cancelledAt = cancelledAt;
     }
 
     public int getId() {

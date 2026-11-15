@@ -20,6 +20,10 @@ public class Account {
     @Column(name = "opening_balance", nullable = false, precision = 19, scale = 2)
     private BigDecimal openingBalance;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AccountStatus status = AccountStatus.ACTIVE;
+
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -29,6 +33,7 @@ public class Account {
         this.type = type;
         this.openingBalance = openingBalance;
         this.user = user;
+        this.status = AccountStatus.ACTIVE;
     }
 
     protected Account() {
@@ -57,5 +62,17 @@ public class Account {
 
     public BigDecimal getOpeningBalance() {
         return openingBalance;
+    }
+
+    public AccountStatus getStatus() {
+        return status;
+    }
+
+    public void archive() {
+        this.status = AccountStatus.ARCHIVED;
+    }
+
+    public void activate() {
+        this.status = AccountStatus.ACTIVE;
     }
 }

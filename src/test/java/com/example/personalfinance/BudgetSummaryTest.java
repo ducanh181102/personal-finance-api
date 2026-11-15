@@ -26,8 +26,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:budget-summary-test",
@@ -100,6 +102,122 @@ class BudgetSummaryTest {
                 .andExpect(jsonPath("$.spentAmount").value(120_000))
                 .andExpect(jsonPath("$.remainingAmount").value(-20_000))
                 .andExpect(jsonPath("$.usagePercentage").value(120.00))
-                .andExpect(jsonPath("$.overBudget").value(true));
+                .andExpect(jsonPath("$.overBudget").value(true))
+                .andExpect(jsonPath("$.status").value("EXCEEDED"));
+    }
+
+    @Test
+    void returnsWarningWhenUsageIsAtLeastEightyPercent() throws Exception {
+        Budget budget = createBudgetWithExpense("Đi lại", 80_000);
+
+        mockMvc.perform(get("/api/budgets/{id}/summary", budget.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.usagePercentage").value(80.00))
+                .andExpect(jsonPath("$.overBudget").value(false))
+                .andExpect(jsonPath("$.status").value("WARNING"));
+    }
+
+    @Test
+    void returnsSafeWhenUsageIsBelowEightyPercent() throws Exception {
+        Budget budget = createBudgetWithExpense("Mua sắm", 79_000);
+
+        mockMvc.perform(get("/api/budgets/{id}/summary", budget.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.usagePercentage").value(79.00))
+                .andExpect(jsonPath("$.status").value("SAFE"));
+    }
+
+    @Test
+    void returnsOnlyWarningAndExceededBudgetsAsAlerts() throws Exception {
+        createBudgetWithExpense("An toàn", 50_000);
+        createBudgetWithExpense("Cảnh báo", 80_000);
+        createBudgetWithExpense("Vượt mức", 101_000);
+
+        mockMvc.perform(get("/api/budgets/alerts")
+                        .param("month", BUDGET_MONTH.toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].status", containsInAnyOrder("WARNING", "EXCEEDED")));
+    }
+
+    @Test
+    void copiesPreviousMonthBudgetsToTheTargetMonth() throws Exception {
+        LocalDate previousMonth = BUDGET_MONTH.minusMonths(1);
+        budgetRepository.save(new Budget(expenseCategory, previousMonth, BigDecimal.valueOf(100_000)));
+
+        Category transportCategory = categoryRepository.save(
+                new Category("Di chuyển", TransactionType.EXPENSE, user)
+        );
+        budgetRepository.save(new Budget(transportCategory, previousMonth, BigDecimal.valueOf(200_000)));
+
+        mockMvc.perform(post("/api/budgets/copy-from-previous-month")
+                        .param("targetMonth", BUDGET_MONTH.withDayOfMonth(15).toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].month", containsInAnyOrder(
+                        BUDGET_MONTH.toString(), BUDGET_MONTH.toString()
+                )))
+                .andExpect(jsonPath("$[*].limitAmount", containsInAnyOrder(100_000, 200_000)));
+
+        List<Budget> targetBudgets = budgetRepository.findByCategoryUserIdAndMonth(
+                user.getId(), BUDGET_MONTH
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(2, targetBudgets.size());
+    }
+
+    @Test
+    void returnsEmptyListWhenPreviousMonthHasNoBudgetsToCopy() throws Exception {
+        mockMvc.perform(post("/api/budgets/copy-from-previous-month")
+                        .param("targetMonth", BUDGET_MONTH.toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        org.junit.jupiter.api.Assertions.assertTrue(
+                budgetRepository.findByCategoryUserIdAndMonth(user.getId(), BUDGET_MONTH).isEmpty()
+        );
+    }
+
+    @Test
+    void doesNotCopyBudgetWhenItsCategoryAlreadyHasTargetMonthBudget() throws Exception {
+        LocalDate previousMonth = BUDGET_MONTH.minusMonths(1);
+        budgetRepository.save(new Budget(expenseCategory, previousMonth, BigDecimal.valueOf(100_000)));
+        budgetRepository.save(new Budget(expenseCategory, BUDGET_MONTH, BigDecimal.valueOf(300_000)));
+
+        mockMvc.perform(post("/api/budgets/copy-from-previous-month")
+                        .param("targetMonth", BUDGET_MONTH.toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtService.generateToken(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        List<Budget> targetBudgets = budgetRepository.findByCategoryUserIdAndMonth(
+                user.getId(), BUDGET_MONTH
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(1, targetBudgets.size());
+        org.junit.jupiter.api.Assertions.assertEquals(
+                BigDecimal.valueOf(300_000), targetBudgets.getFirst().getLimitAmount()
+        );
+    }
+
+    private Budget createBudgetWithExpense(String categoryName, int amount) {
+        Category category = categoryRepository.save(
+                new Category(categoryName, TransactionType.EXPENSE, user)
+        );
+        Budget budget = budgetRepository.save(
+                new Budget(category, BUDGET_MONTH, BigDecimal.valueOf(100_000))
+        );
+        transactionRepository.save(new Transaction(
+                account,
+                TransactionType.EXPENSE,
+                BigDecimal.valueOf(amount),
+                BUDGET_MONTH.atTime(12, 0),
+                "Chi tiêu kiểm thử",
+                category
+        ));
+        return budget;
     }
 }

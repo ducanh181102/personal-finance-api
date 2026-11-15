@@ -131,6 +131,27 @@ class TransferIntegrationTest {
     }
 
     @Test
+    void preventsTransferWhenEitherAccountIsArchived() throws Exception {
+        fromAccount.archive();
+        accountRepository.save(fromAccount);
+
+        mockMvc.perform(post("/api/transfers")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fromAccountId": %d,
+                                  "toAccountId": %d,
+                                  "amount": 200.00,
+                                  "transferDate": "2026-11-10T10:00:00"
+                                }
+                                """.formatted(fromAccount.getId(), toAccount.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Không thể thực hiện giao dịch với tài khoản đã lưu trữ."));
+    }
+
+    @Test
     void preventsDeletingAccountThatHasTransfer() throws Exception {
         transferRepository.save(new Transfer(
                 fromAccount,

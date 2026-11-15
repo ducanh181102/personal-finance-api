@@ -54,7 +54,7 @@ public class UserController {
 
     @GetMapping("/accounts/me")
     public List<AccountResponse> getAllAccount() {
-        return accountService.getAllAccounts().stream().map(
+        return accountService.getAllAccounts(false).stream().map(
                 accountMapper::toAccountResponse
         ).toList();
     }
@@ -67,7 +67,7 @@ public class UserController {
 
     @GetMapping("/categories/me")
     public List<CategoryResponse> getAllCategory() {
-        return categoryService.getCategories().stream().map(categoryMapper::toCategoryResponse).toList();
+        return categoryService.getCategories(false).stream().map(categoryMapper::toCategoryResponse).toList();
     }
 
     @PostMapping

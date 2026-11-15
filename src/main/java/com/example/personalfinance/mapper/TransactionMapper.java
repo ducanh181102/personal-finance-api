@@ -14,7 +14,8 @@ public class TransactionMapper {
                 transaction.getType(),
                 transaction.getAmount(),
                 transaction.getTransactionDate(),
-                transaction.getNote()
+                transaction.getNote(),
+                transaction.getSource()
         );
     }
 }

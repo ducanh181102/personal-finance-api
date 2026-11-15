@@ -3,6 +3,7 @@ package com.example.personalfinance.service;
 import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Account;
+import com.example.personalfinance.model.AccountStatus;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.*;
 import org.springframework.stereotype.Service;
@@ -57,13 +58,22 @@ public class AccountService {
     }
 
     @Transactional
-    public List<Account> getAllAccounts() {
+    public List<Account> getAllAccounts(boolean includeArchived) {
         User currentUser = currentUserService.getCurrentUser();
-        return accountRepository.findByUserId(currentUser.getId());
+        return includeArchived ? accountRepository.findByUserId(currentUser.getId())
+                : accountRepository.findByUserIdAndStatus(currentUser.getId(), AccountStatus.ACTIVE);
     }
 
     public Account getAccountById(int id) {
         return getOwnedAccountById(id);
+    }
+
+    public Account getActiveAccountById(int id) {
+        Account account = getOwnedAccountById(id);
+        if (account.getStatus() != AccountStatus.ACTIVE) {
+            throw new IllegalArgumentException("Không thể thực hiện giao dịch với tài khoản đã lưu trữ.");
+        }
+        return account;
     }
 
     @Transactional
@@ -79,6 +89,23 @@ public class AccountService {
             throw new IllegalArgumentException("Không được xóa tài khoản đã có thanh toán nợ.");
         accountRepository.delete(account);
     }
+
+    @Transactional
+    public void archiveAccountById(int id) {
+        Account account = getAccountById(id);
+        account.archive();
+        recurringTransactionRepository.findByAccountIdAndActiveTrue(id)
+                .forEach(recurringTransaction -> recurringTransaction.setActive(false));
+        accountRepository.save(account);
+    }
+
+    @Transactional
+    public void activateAccountById(int id) {
+        Account account = getAccountById(id);
+        account.activate();
+        accountRepository.save(account);
+    }
+
 
     // Đình chỉ
 //    @Transactional

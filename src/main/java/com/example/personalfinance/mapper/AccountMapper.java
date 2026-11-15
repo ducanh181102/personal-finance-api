@@ -18,6 +18,7 @@ public class AccountMapper {
                 account.getName(),
                 account.getType(),
                 account.getOpeningBalance(),
+                account.getStatus(),
                 userMapper.toUserResponse(account.getUser())
         );
     }

@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -185,6 +187,157 @@ class SecurityIntegrationTest {
                 .andExpect(status().isNoContent());
 
         assertFalse(accountRepository.existsById(emptyAccount.getId()));
+    }
+
+    @Test
+    void archivesAccountBlocksNewTransactionAndCanBeActivatedAgain() throws Exception {
+        mockMvc.perform(post("/api/accounts/{id}/archive", accountA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/accounts/{id}", accountA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        mockMvc.perform(post("/api/transactions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": %d,
+                                  "categoryId": %d,
+                                  "type": "EXPENSE",
+                                  "amount": 10000,
+                                  "transactionDate": "2026-11-10T12:00:00"
+                                }
+                                """.formatted(accountA.getId(), categoryA.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Không thể thực hiện giao dịch với tài khoản đã lưu trữ."));
+
+        mockMvc.perform(post("/api/accounts/{id}/activate", accountA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/transactions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": %d,
+                                  "categoryId": %d,
+                                  "type": "EXPENSE",
+                                  "amount": 10000,
+                                  "transactionDate": "2026-11-10T12:00:00"
+                                }
+                                """.formatted(accountA.getId(), categoryA.getId())))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void hidesArchivedAccountsByDefaultAndReturnsThemWhenRequested() throws Exception {
+        mockMvc.perform(post("/api/accounts/{id}/archive", accountA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/accounts")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        mockMvc.perform(get("/api/accounts")
+                        .param("includeArchived", "true")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(accountA.getId()))
+                .andExpect(jsonPath("$[0].status").value("ARCHIVED"));
+    }
+
+    @Test
+    void archivesCategoryBlocksNewFinancialOperationsAndCanBeActivatedAgain() throws Exception {
+        mockMvc.perform(post("/api/categories/{id}/archive", categoryA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/categories/{id}", categoryA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        mockMvc.perform(post("/api/transactions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": %d,
+                                  "categoryId": %d,
+                                  "type": "EXPENSE",
+                                  "amount": 10000,
+                                  "transactionDate": "2026-11-10T12:00:00"
+                                }
+                                """.formatted(accountA.getId(), categoryA.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Không thể sử dụng danh mục đã lưu trữ."));
+
+        mockMvc.perform(post("/api/budgets")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "categoryId": %d,
+                                  "month": "2026-12-01",
+                                  "limitAmount": 200000
+                                }
+                                """.formatted(categoryA.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Không thể sử dụng danh mục đã lưu trữ."));
+
+        mockMvc.perform(post("/api/recurring-transactions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": %d,
+                                  "categoryId": %d,
+                                  "amount": 10000,
+                                  "frequency": "MONTHLY",
+                                  "nextRunDate": "%s"
+                                }
+                                """.formatted(accountA.getId(), categoryA.getId(), LocalDate.now().plusDays(1))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Không thể sử dụng danh mục đã lưu trữ."));
+
+        mockMvc.perform(post("/api/categories/{id}/activate", categoryA.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/transactions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": %d,
+                                  "categoryId": %d,
+                                  "type": "EXPENSE",
+                                  "amount": 10000,
+                                  "transactionDate": "2026-11-10T12:00:00"
+                                }
+                                """.formatted(accountA.getId(), categoryA.getId())))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void preventsArchivingSystemCategory() throws Exception {
+        Category systemCategory = categoryRepository.save(
+                new Category("TRẢ NỢ", TransactionType.EXPENSE, userA, true)
+        );
+
+        mockMvc.perform(post("/api/categories/{id}/archive", systemCategory.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Không thể lưu trữ danh mục hệ thống."));
     }
 
     @Test

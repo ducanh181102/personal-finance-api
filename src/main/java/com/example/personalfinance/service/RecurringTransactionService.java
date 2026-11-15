@@ -54,8 +54,8 @@ public class RecurringTransactionService {
                                                            BigDecimal amount, String note,
                                                            RecurrenceFrequency frequency,
                                                            LocalDate nextRunDate) {
-        Account account = accountService.getAccountById(accountId);
-        Category category = categoryService.findCategoryById(categoryId);
+        Account account = accountService.getActiveAccountById(accountId);
+        Category category = categoryService.getActiveCategoryById(categoryId);
         RecurringTransaction recurringTransaction = new RecurringTransaction(account, category, amount, note, frequency, nextRunDate);
         return recurringTransactionRepository.save(recurringTransaction);
     }
@@ -67,12 +67,12 @@ public class RecurringTransactionService {
         RecurringTransaction recurringTransaction = getRecurringTransactionById(id);
 
         if (accountId != null) {
-            Account account = accountService.getAccountById(accountId);
+            Account account = accountService.getActiveAccountById(accountId);
             recurringTransaction.setAccount(account);
         }
 
         if (categoryId != null) {
-            Category category = categoryService.findCategoryById(categoryId);
+            Category category = categoryService.getActiveCategoryById(categoryId);
             recurringTransaction.setCategory(category);
         }
 
@@ -93,7 +93,12 @@ public class RecurringTransactionService {
         }
 
         if (active != null) {
-            recurringTransaction.setActive(active);
+            if (active) {
+                if (!(recurringTransaction.getCategory().getStatus().equals(CategoryStatus.ACTIVE) && recurringTransaction.getAccount().getStatus().equals(AccountStatus.ACTIVE))) {
+                    throw new IllegalArgumentException("Chỉ khởi động lại khi tài khoản và danh mục liên quan phải đang hoạt động.");
+                }
+                recurringTransaction.setActive(true);
+            } else recurringTransaction.setActive(false);
         }
 
         return recurringTransactionRepository.save(recurringTransaction);
@@ -115,7 +120,8 @@ public class RecurringTransactionService {
                 dueRecurringTransaction.getAmount(),
                 dueRecurringTransaction.getNextRunDate().atStartOfDay(),
                 dueRecurringTransaction.getNote(),
-                dueRecurringTransaction.getCategory()
+                dueRecurringTransaction.getCategory(),
+                TransactionSource.RECURRING
         ));
 
         dueRecurringTransaction.setNextRunDate(

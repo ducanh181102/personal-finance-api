@@ -2,9 +2,7 @@ package com.example.personalfinance.service;
 
 import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
-import com.example.personalfinance.model.Category;
-import com.example.personalfinance.model.TransactionType;
-import com.example.personalfinance.model.User;
+import com.example.personalfinance.model.*;
 import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.RecurringTransactionRepository;
 import com.example.personalfinance.repository.TransactionRepository;
@@ -21,7 +19,10 @@ public class CategoryService {
     private final CurrentUserService currentUserService;
     private final RecurringTransactionRepository recurringTransactionRepository;
 
-    public CategoryService(CategoryRepository categoryRepository, TransactionRepository transactionRepository, CurrentUserService currentUserService, UserService userService, RecurringTransactionRepository recurringTransactionRepository) {
+    public CategoryService(CategoryRepository categoryRepository,
+                           TransactionRepository transactionRepository,
+                           CurrentUserService currentUserService,
+                           RecurringTransactionRepository recurringTransactionRepository) {
         this.categoryRepository = categoryRepository;
         this.transactionRepository = transactionRepository;
         this.currentUserService = currentUserService;
@@ -37,6 +38,14 @@ public class CategoryService {
         return category.get();
     }
 
+    public Category getActiveCategoryById(int id) {
+        Category category = getOwnedCategoryById(id);
+        if (category.getStatus() != CategoryStatus.ACTIVE) {
+            throw new IllegalArgumentException("Không thể sử dụng danh mục đã lưu trữ.");
+        }
+        return category;
+    }
+
     // Đình chỉ
 //    public List<Category> getAllCategories() {
 //        return categoryRepository.findAll();
@@ -48,6 +57,20 @@ public class CategoryService {
         return categoryRepository.save(category);
     }
 
+    @Transactional
+    public void ensureDebtSystemCategories(User user) {
+        ensureSystemCategory("TRẢ NỢ", TransactionType.EXPENSE, user);
+        ensureSystemCategory("THU HỒI NỢ", TransactionType.INCOME, user);
+        ensureSystemCategory("HOÀN TRẢ NỢ", TransactionType.INCOME, user);
+        ensureSystemCategory("HOÀN THU HỒI NỢ", TransactionType.EXPENSE, user);
+    }
+
+    private void ensureSystemCategory(String name, TransactionType type, User user) {
+        if (!categoryRepository.existsByNameAndTypeAndUserIdAndIsSystemCategoryTrue(name, type, user.getId())) {
+            categoryRepository.save(new Category(name, type, user, true));
+        }
+    }
+
     public Category findCategoryById(int id) {
         return getOwnedCategoryById(id);
     }
@@ -55,6 +78,7 @@ public class CategoryService {
     @Transactional
     public Category updateCategory(int id, String name, TransactionType type) {
         Category category = getOwnedCategoryById(id);
+        if (category.isSystemCategory()) throw new IllegalArgumentException("Không thể chỉnh sửa danh mục hệ thống.");
         category.setName(name != null ? name : category.getName());
         if (type != null && type != category.getType()) {
             if (transactionRepository.existsByCategoryId(id)) {
@@ -68,6 +92,7 @@ public class CategoryService {
     @Transactional
     public void deleteCategoryById(int id) {
         Category category = getOwnedCategoryById(id);
+        if (category.isSystemCategory()) throw new IllegalArgumentException("Không thể xoá danh mục hệ thống.");
         if (transactionRepository.existsByCategoryId(id)) {
             throw new IllegalArgumentException("Không được xóa category đang có transaction sử dụng.");
         }
@@ -79,8 +104,27 @@ public class CategoryService {
     }
 
     @Transactional
-    public List<Category> getCategories() {
+    public List<Category> getCategories(boolean includeArchived) {
         User currentUser = currentUserService.getCurrentUser();
-        return categoryRepository.findByUserId(currentUser.getId());
+        return includeArchived ? categoryRepository.findByUserId(currentUser.getId()) : categoryRepository.findByUserIdAndStatus(currentUser.getId(), CategoryStatus.ACTIVE);
+    }
+
+    @Transactional
+    public void archiveCategoryById(int id) {
+        Category category = findCategoryById(id);
+        if (category.isSystemCategory()) {
+            throw new IllegalArgumentException("Không thể lưu trữ danh mục hệ thống.");
+        }
+        category.archive();
+        recurringTransactionRepository.findByCategoryIdAndActiveTrue(id)
+                .forEach(recurringTransaction -> recurringTransaction.setActive(false));
+        categoryRepository.save(category);
+    }
+
+    @Transactional
+    public void activateCategoryById(int id) {
+        Category category = findCategoryById(id);
+        category.activate();
+        categoryRepository.save(category);
     }
 }

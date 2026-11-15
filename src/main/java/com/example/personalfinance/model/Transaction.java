@@ -27,17 +27,34 @@ public class Transaction {
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private TransactionSource source = TransactionSource.MANUAL;
+
     public Transaction(Account account, TransactionType type, BigDecimal amount, LocalDateTime transactionDate, String note, Category category) {
+        this(account, type, amount, transactionDate, note, category, TransactionSource.MANUAL);
+    }
+
+    public Transaction(Account account, TransactionType type, BigDecimal amount, LocalDateTime transactionDate, String note, Category category, TransactionSource source) {
         this.account = account;
         this.type = type;
         this.amount = amount;
         this.transactionDate = transactionDate;
         this.note = note;
         this.category = category;
+        this.source = source;
     }
 
     public Category getCategory() {
         return category;
+    }
+
+    public TransactionSource getSource() {
+        return source;
+    }
+
+    public boolean isManual() {
+        return source == null || source == TransactionSource.MANUAL;
     }
 
     protected Transaction() {

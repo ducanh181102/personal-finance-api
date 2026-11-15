@@ -2,10 +2,8 @@ package com.example.personalfinance.service;
 
 import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
-import com.example.personalfinance.model.Account;
-import com.example.personalfinance.model.Debt;
-import com.example.personalfinance.model.DebtPayment;
-import com.example.personalfinance.model.User;
+import com.example.personalfinance.model.*;
+import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.DebtPaymentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,12 +19,18 @@ public class DebtPaymentService {
     private final CurrentUserService currentUserService;
     private final DebtService debtService;
     private final AccountService accountService;
+    private final TransactionService transactionService;
+    private final CategoryRepository categoryRepository;
+    private final CategoryService categoryService;
 
-    public DebtPaymentService(DebtPaymentRepository debtPaymentRepository, CurrentUserService currentUserService, DebtService debtService, AccountService accountService) {
+    public DebtPaymentService(DebtPaymentRepository debtPaymentRepository, CurrentUserService currentUserService, DebtService debtService, AccountService accountService, TransactionService transactionService, CategoryRepository categoryRepository, CategoryService categoryService) {
         this.debtPaymentRepository = debtPaymentRepository;
         this.currentUserService = currentUserService;
         this.debtService = debtService;
         this.accountService = accountService;
+        this.transactionService = transactionService;
+        this.categoryRepository = categoryRepository;
+        this.categoryService = categoryService;
     }
 
     private DebtPayment getOwnedDebtPaymentById(int id) {
@@ -54,29 +58,65 @@ public class DebtPaymentService {
                                          String note) {
 
         Debt debt = debtService.getDebtById(debtId);
-        Account account = accountService.getAccountById(accountId);
+        Account account = accountService.getActiveAccountById(accountId);
+        categoryService.ensureDebtSystemCategories(account.getUser());
 
-        DebtPayment debtPayment = new DebtPayment(debt, account, amount, paidAt, note);
+        // Tạo transaction
+        TransactionType type = DebtType.BORROWED == debt.getType() ? TransactionType.EXPENSE : TransactionType.INCOME;
+        String categoryName = DebtType.BORROWED == debt.getType() ? "TRẢ NỢ" : "THU HỒI NỢ";
+        Category category = getSystemCategory(categoryName, type, account.getUser().getId());
+        Transaction transaction = transactionService.createTransaction(
+                account.getId(),
+                category.getId(),
+                type,
+                amount,
+                note,
+                paidAt,
+                TransactionSource.DEBT_PAYMENT
+        );
+
+        DebtPayment debtPayment = new DebtPayment(debt, account, amount, paidAt, note, transaction);
         // Cập nhật debt
         debt.applyPayment(amount);
+
 
         return debtPaymentRepository.save(debtPayment);
     }
 
     @Transactional
-    public void deleteDebtPaymentById(int id) {
+    public DebtPayment cancelDebtPaymentById(int id) {
         DebtPayment debtPayment = getDebtPaymentById(id);
-        debtPaymentRepository.delete(debtPayment);
-        // Cập nhật debt
-        Debt debt = debtService.getDebtById(debtPayment.getDebt().getId());
+        if (debtPayment.getStatus() == DebtPaymentStatus.CANCELLED) {
+            throw new IllegalArgumentException("Thanh toán này đã bị hủy.");
+        }
+
+        Debt debt = debtPayment.getDebt();
+        Account account = debtPayment.getAccount();
+        categoryService.ensureDebtSystemCategories(account.getUser());
         debt.reversePayment(debtPayment.getAmount());
+
+        // Tạo transaction đảo chiều
+        TransactionType type = DebtType.BORROWED == debt.getType() ? TransactionType.INCOME : TransactionType.EXPENSE;
+        String categoryName = DebtType.BORROWED == debt.getType() ? "HOÀN TRẢ NỢ" : "HOÀN THU HỒI NỢ";
+        Category category = getSystemCategory(categoryName, type, account.getUser().getId());
+        LocalDateTime cancelledAt = LocalDateTime.now();
+        Transaction reversalTransaction = transactionService.createTransaction(
+                account.getId(),
+                category.getId(),
+                type,
+                debtPayment.getAmount(),
+                "Hủy thanh toán nợ #" + debtPayment.getId(),
+                cancelledAt,
+                TransactionSource.DEBT_PAYMENT_REVERSAL
+        );
+        debtPayment.cancelDebtPayment(reversalTransaction, cancelledAt);
+
+        return debtPayment;
     }
 
-    public boolean isExistByDebtId(int debtId) {
-        return debtPaymentRepository.existsByDebtId(debtId);
+    private Category getSystemCategory(String name, TransactionType type, int userId) {
+        return categoryRepository.findByNameAndTypeAndUserIdAndIsSystemCategoryTrue(name, type, userId)
+                .orElseThrow(() -> new IllegalStateException("Không tìm thấy danh mục hệ thống: " + name));
     }
 
-    public boolean isExistByAccountId(int accountId) {
-        return debtPaymentRepository.existsByAccountId(accountId);
-    }
 }

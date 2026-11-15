@@ -25,8 +25,8 @@ public class CategoryController {
     }
 
     @GetMapping
-    public List<CategoryResponse> getAllCategories() {
-        return categoryService.getCategories().stream().map(categoryMapper::toCategoryResponse).toList();
+    public List<CategoryResponse> getAllCategories(@RequestParam(name = "includeArchived", required = false, defaultValue = "false") boolean includeArchived) {
+        return categoryService.getCategories(includeArchived).stream().map(categoryMapper::toCategoryResponse).toList();
     }
 
     @GetMapping("/{id}")
@@ -39,6 +39,18 @@ public class CategoryController {
     public ResponseEntity<CategoryResponse> createCategory(@Valid @RequestBody CreateCategoryRequest request) {
         Category category = categoryService.createCategory(request.getName(), request.getType());
         return ResponseEntity.status(HttpStatus.CREATED).body(categoryMapper.toCategoryResponse(category));
+    }
+
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<Void> archiveCategoryById(@PathVariable("id") int id) {
+        categoryService.archiveCategoryById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/activate")
+    public ResponseEntity<Void> activateCategoryById(@PathVariable("id") int id) {
+        categoryService.activateCategoryById(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}")

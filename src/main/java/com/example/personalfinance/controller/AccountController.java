@@ -29,8 +29,8 @@ public class AccountController {
     private final AccountService accountService;
 
     @GetMapping
-    public List<AccountResponse> getAllAccounts() {
-        return accountService.getAllAccounts().stream().map(
+    public List<AccountResponse> getAllAccounts(@RequestParam(name = "includeArchived", defaultValue = "false", required = false) Boolean includeArchived) {
+        return accountService.getAllAccounts(includeArchived).stream().map(
                 accountMapper::toAccountResponse
         ).toList();
     }
@@ -78,6 +78,18 @@ public class AccountController {
     public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
         Account account = accountService.createAccount(request.getName(), request.getType(), request.getOpeningBalance());
         return ResponseEntity.status(HttpStatus.CREATED).body(accountMapper.toAccountResponse(account));
+    }
+
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<Void> archiveAccountById(@PathVariable("id") int id) {
+        accountService.archiveAccountById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/activate")
+    public ResponseEntity<Void> activateAccountById(@PathVariable("id") int id) {
+        accountService.activateAccountById(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}")

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,7 +41,7 @@ public class BudgetService {
 
     @Transactional
     public Budget createBudget(int categoryId, LocalDate month, BigDecimal limitAmount) {
-        Category category = categoryService.findCategoryById(categoryId);
+        Category category = categoryService.getActiveCategoryById(categoryId);
         if (category.getType() != TransactionType.EXPENSE)
             throw new IllegalArgumentException("Chỉ có loại danh mục chi tiêu mới tạo được ngân sách.");
         if (budgetRepository.existsByCategoryIdAndMonth(categoryId, month))
@@ -57,7 +58,7 @@ public class BudgetService {
     @Transactional
     public Budget updateBudgetById(int id, BigDecimal limitAmount) {
         Budget budget = getOwnedBudgetById(id);
-        budget.setLimitAmount(limitAmount);
+        budget.setLimitAmount(limitAmount != null ? limitAmount : budget.getLimitAmount());
         return budgetRepository.save(budget);
     }
 
@@ -101,6 +102,8 @@ public class BudgetService {
         boolean overBudget =
                 spentAmount.compareTo(budget.getLimitAmount()) > 0;
 
+        BudgetStatus status = getBudgetStatus(usagePercentage);
+
         return new BudgetSummaryResponse(budget.getId(),
                 budget.getCategory().getId(),
                 budget.getCategory().getName(),
@@ -109,8 +112,19 @@ public class BudgetService {
                 spentAmount,
                 remainingAmount,
                 usagePercentage,
-                overBudget
+                overBudget,
+                status
         );
+    }
+
+    private BudgetStatus getBudgetStatus(BigDecimal usagePercentage) {
+        if (usagePercentage.compareTo(BigDecimal.valueOf(100)) > 0) {
+            return BudgetStatus.EXCEEDED;
+        }
+        if (usagePercentage.compareTo(BigDecimal.valueOf(80)) >= 0) {
+            return BudgetStatus.WARNING;
+        }
+        return BudgetStatus.SAFE;
     }
 
     public List<BudgetSummaryResponse> getBudgetSummaryByMonth(LocalDate month) {
@@ -119,5 +133,52 @@ public class BudgetService {
         }
         List<Budget> budgets = budgetRepository.findByCategoryUserIdAndMonth(currentUserService.getCurrentUser().getId(), month);
         return budgets.stream().map(budget -> getBudgetSummary(budget.getId())).toList();
+    }
+
+    public List<BudgetSummaryResponse> getBudgetAlerts(LocalDate month) {
+        return getBudgetSummaryByMonth(month)
+                .stream()
+                .filter(summary -> summary.getStatus() != BudgetStatus.SAFE)
+                .toList();
+    }
+
+    @Transactional
+    public List<Budget> copyBudgetsFromPreviousMonth(LocalDate targetMonth) {
+        // Chuyển về ngày đầu tháng
+        LocalDate normalizedTargetMonth = targetMonth.withDayOfMonth(1);
+
+        // Ngày đầu, tháng trước
+        LocalDate previousMonth = normalizedTargetMonth.minusMonths(1);
+
+        // Lấy ngân sách của tháng đích
+        List<Budget> normalizedTargetBudgets =
+                budgetRepository.findByCategoryUserIdAndMonth(currentUserService.getCurrentUser().getId(), normalizedTargetMonth);
+
+        // Lấy ngân sách của tháng trước
+        List<Budget> previousBudgets =
+                budgetRepository.findByCategoryUserIdAndMonth(currentUserService.getCurrentUser().getId(), previousMonth);
+
+        // List ngân sách đã coppy
+        List<Budget> copiedBudgets = new ArrayList<>();
+
+        for (Budget previousBudget : previousBudgets) {
+            boolean categoryAlreadyExists = false;
+            for (Budget normalizedTargetBudget : normalizedTargetBudgets) {
+                if (normalizedTargetBudget.getCategory().getId() == previousBudget.getCategory().getId()) {
+                    categoryAlreadyExists = true;
+                    break;
+                }
+            }
+
+            if (!categoryAlreadyExists) {
+                copiedBudgets.add(createBudget(
+                        previousBudget.getCategory().getId(),
+                        normalizedTargetMonth,
+                        previousBudget.getLimitAmount()
+                ));
+            }
+        }
+
+        return copiedBudgets;
     }
 }

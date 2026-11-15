@@ -49,9 +49,10 @@ public class DebtPaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(debtPaymentResponse);
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<DebtPaymentResponse> deleteDebtPaymentById(@PathVariable("id") int id) {
-        debtPaymentService.deleteDebtPaymentById(id);
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<DebtPaymentResponse> cancelDebtPaymentById(@PathVariable("id") int id) {
+        DebtPayment debtPayment = debtPaymentService.cancelDebtPaymentById(id);
+        return ResponseEntity.ok(debtPaymentMapper.toDebtPaymentResponse(debtPayment));
     }
+
 }

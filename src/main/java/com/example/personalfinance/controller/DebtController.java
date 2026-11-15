@@ -1,6 +1,7 @@
 package com.example.personalfinance.controller;
 
 import com.example.personalfinance.dto.debt.CreateDebtRequest;
+import com.example.personalfinance.dto.debt.DebtAlertResponse;
 import com.example.personalfinance.dto.debt.DebtResponse;
 import com.example.personalfinance.dto.debt.UpdateDebtRequest;
 import com.example.personalfinance.mapper.DebtMapper;
@@ -35,6 +36,13 @@ public class DebtController {
         Debt debt = debtService.getDebtById(id);
         DebtResponse debtResponse = debtMapper.toDebtResponse(debt);
         return ResponseEntity.ok(debtResponse);
+    }
+
+    @GetMapping("/alerts")
+    public List<DebtAlertResponse> getDebtAlerts(
+            @RequestParam(defaultValue = "7") int days
+    ) {
+        return debtService.getDebtAlerts(days);
     }
 
     @PostMapping

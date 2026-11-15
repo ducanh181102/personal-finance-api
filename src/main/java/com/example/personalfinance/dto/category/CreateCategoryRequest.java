@@ -24,4 +24,5 @@ public class CreateCategoryRequest {
     public TransactionType getType() {
         return type;
     }
+
 }

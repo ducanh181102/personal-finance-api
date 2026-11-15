@@ -4,20 +4,18 @@ import com.example.personalfinance.model.Transaction;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-public interface TransactionRepository extends JpaRepository<Transaction, Integer> {
+public interface TransactionRepository extends JpaRepository<Transaction, Integer>,
+        JpaSpecificationExecutor<Transaction> {
     List<Transaction> findByAccountId(int accountId);
 
     List<Transaction> findByCategoryId(int categoryId);
 
-    Page<Transaction> findByAccountId(int accountId, Pageable pageable);
-
     List<Transaction> findByAccountUserId(int userId);
-
-    Page<Transaction> findByAccountUserId(int userId, Pageable pageable);
 
     boolean existsByCategoryId(int categoryId);
 

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 
 @Entity
 @Table(name = "budgets")
@@ -46,5 +47,9 @@ public class Budget {
 
     public void setLimitAmount(BigDecimal limitAmount) {
         this.limitAmount = limitAmount;
+    }
+
+    public boolean isForMonth(LocalDate month) {
+        return YearMonth.from(this.month).equals(YearMonth.from(month));
     }
 }

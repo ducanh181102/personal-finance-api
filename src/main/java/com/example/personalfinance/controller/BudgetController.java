@@ -32,10 +32,20 @@ public class BudgetController {
         return budgetService.getBudgetSummaryByMonth(month);
     }
 
+    @PostMapping("/copy-from-previous-month")
+    public List<Budget> copyBudgetsFromPreviousMonth(@RequestParam LocalDate targetMonth) {
+        return budgetService.copyBudgetsFromPreviousMonth(targetMonth);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Budget> getBudgetById(@PathVariable("id") int id) {
         Budget budget = budgetService.getBudgetById(id);
         return ResponseEntity.ok(budget);
+    }
+
+    @GetMapping("/alerts")
+    public List<BudgetSummaryResponse> getBudgetAlerts(@RequestParam LocalDate month) {
+        return budgetService.getBudgetAlerts(month);
     }
 
     @GetMapping("/{id}/summary")

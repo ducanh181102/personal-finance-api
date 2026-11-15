@@ -55,8 +55,8 @@ public class TransferService {
         if (Objects.equals(fromAccountId, toAccountId))
             throw new IllegalArgumentException("Tài khoản nhận và gửi không được trùng nhau.");
 
-        Account fromAccount = accountService.getAccountById(fromAccountId);
-        Account toAccount = accountService.getAccountById(toAccountId);
+        Account fromAccount = accountService.getActiveAccountById(fromAccountId);
+        Account toAccount = accountService.getActiveAccountById(toAccountId);
 
         Transfer transfer = new Transfer(
                 fromAccount,

@@ -98,6 +98,6 @@ class AccountPeriodSummaryTest {
                         .param("from", REPORT_DATE.plusDays(1).toString())
                         .param("to", REPORT_DATE.toString()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Ngày bắt đầu không được sau ngày kết thúc"));
+                .andExpect(jsonPath("$.message").value("Ngày bắt đầu không được sau ngày kết thúc."));
     }
 }

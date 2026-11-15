@@ -11,7 +11,9 @@ public class CategoryMapper {
                 category.getId(),
                 category.getName(),
                 category.getType(),
-                category.getUser().getId()
+                category.getUser().getId(),
+                category.isSystemCategory(),
+                category.getStatus()
         );
     }
 }

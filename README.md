@@ -42,6 +42,8 @@ Authorization: Bearer <accessToken>
 | POST | `/api/auth/login` | Đăng nhập, nhận JWT | 200 |
 | POST | `/api/auth/reactivate` | Khôi phục user đã vô hiệu hóa | 200 |
 | GET | `/api/users/me` | Xem user hiện tại | 200 |
+| GET | `/api/users/accounts/me` | Danh sách tài khoản đang hoạt động của user | 200 |
+| GET | `/api/users/categories/me` | Danh sách danh mục đang hoạt động của user | 200 |
 | PATCH | `/api/users/me` | Cập nhật user hiện tại | 200 |
 | DELETE | `/api/users/me` | Vô hiệu hóa user hiện tại | 204 |
 
@@ -68,7 +70,7 @@ Response login chứa `accessToken` và thông tin user, không bao giờ trả 
 
 User chỉ có thể xem, tạo, sửa hoặc xóa dữ liệu thuộc chính họ: Account, Category, Transaction, Budget, Transfer, Savings Goal, Goal Contribution, Debt và Debt Payment. Không có token, token sai/hết hạn trả `401`; có token nhưng truy cập dữ liệu của user khác trả `403`.
 
-`DELETE /api/users/me` là **soft delete**: đặt `active = false`, không xóa lịch sử tài chính. Token cũ bị từ chối; user có thể dùng `/api/auth/reactivate` với email và mật khẩu cũ để nhận token mới.
+`DELETE /api/users/me` là **soft delete**: đặt `active = false`, không xóa lịch sử tài chính. Khi user bị vô hiệu hóa, API từ chối token của user. Gửi `email` và `oldPassword` đến `/api/auth/reactivate` để khôi phục user và nhận token mới.
 
 ## Luồng dữ liệu
 
@@ -107,6 +109,8 @@ Tất cả request có body JSON cần header `Content-Type: application/json`.
 | GET | `/api/accounts/{id}` | Xem một tài khoản | 200 |
 | POST | `/api/accounts` | Tạo tài khoản | 201 |
 | PATCH | `/api/accounts/{id}` | Đổi tên tài khoản | 200 |
+| POST | `/api/accounts/{id}/archive` | Lưu trữ tài khoản | 204 |
+| POST | `/api/accounts/{id}/activate` | Kích hoạt lại tài khoản | 204 |
 | DELETE | `/api/accounts/{id}` | Xóa tài khoản | 204 |
 
 ```json
@@ -117,6 +121,8 @@ Tất cả request có body JSON cần header `Content-Type: application/json`.
 }
 ```
 
+Danh sách mặc định chỉ trả tài khoản `ACTIVE`. Dùng `includeArchived=true` để lấy cả tài khoản `ARCHIVED`. Lưu trữ giữ nguyên lịch sử giao dịch và tạm dừng các mẫu định kỳ gắn với tài khoản.
+
 ### Category
 
 | Method | Đường dẫn | Chức năng | Status thành công |
@@ -125,6 +131,8 @@ Tất cả request có body JSON cần header `Content-Type: application/json`.
 | GET | `/api/categories/{id}` | Xem một danh mục | 200 |
 | POST | `/api/categories` | Tạo danh mục | 201 |
 | PATCH | `/api/categories/{id}` | Đổi tên hoặc type | 200 |
+| POST | `/api/categories/{id}/archive` | Lưu trữ danh mục | 204 |
+| POST | `/api/categories/{id}/activate` | Kích hoạt lại danh mục | 204 |
 | DELETE | `/api/categories/{id}` | Xóa danh mục | 204 |
 
 ```json
@@ -135,6 +143,8 @@ Tất cả request có body JSON cần header `Content-Type: application/json`.
 ```
 
 Category đang được transaction sử dụng không thể bị xóa. Type của category đang được sử dụng cũng không thể đổi, vì sẽ làm dữ liệu transaction cũ bị lệch nghiệp vụ.
+
+Danh sách mặc định chỉ trả danh mục `ACTIVE`. Dùng `includeArchived=true` để lấy cả danh mục `ARCHIVED`. Backend tự tạo và bảo vệ các danh mục hệ thống dùng cho thanh toán nợ và giao dịch đảo chiều. Lưu trữ danh mục sẽ tạm dừng các mẫu định kỳ gắn với danh mục đó.
 
 ### Transfer
 
@@ -161,8 +171,9 @@ Hai account phải cùng thuộc user hiện tại và không được trùng nh
 
 | Method | Đường dẫn | Chức năng | Status thành công |
 | --- | --- | --- | --- |
-| GET | `/api/transactions` | Danh sách giao dịch, có thể lọc | 200 |
-| GET | `/api/transactions/page` | Danh sách có phân trang | 200 |
+| GET | `/api/transactions` | Toàn bộ giao dịch của user hiện tại | 200 |
+| GET | `/api/transactions/page` | Danh sách có bộ lọc, sắp xếp và phân trang | 200 |
+| GET | `/api/transactions/category/{categoryId}` | Danh sách giao dịch theo danh mục | 200 |
 | GET | `/api/transactions/{id}` | Xem một giao dịch | 200 |
 | POST | `/api/transactions` | Tạo giao dịch | 201 |
 | PATCH | `/api/transactions/{id}` | Sửa amount, type hoặc note | 200 |
@@ -183,15 +194,25 @@ Ví dụ tạo khoản chi:
 
 `transactionDate` là bắt buộc, dùng định dạng `YYYY-MM-DDTHH:mm:ss` và không được ở tương lai.
 
-Lọc giao dịch theo account và khoảng ngày:
+Ví dụ dùng `/api/transactions/page` để lọc và phân trang:
 
 ```text
-GET /api/transactions?accountId=1&from=2026-11-01&to=2026-11-30
 GET /api/transactions/page?accountId=1&page=0&size=10
-GET /api/transactions/page?accountId=1&from=2026-11-01&to=2026-11-30&page=0&size=10
+GET /api/transactions/page?from=2026-11-01&to=2026-11-30&sort=ASC
+GET /api/transactions/page?categoryId=2&type=EXPENSE&source=MANUAL&minAmount=10000&maxAmount=100000&keyword=trua
 ```
 
-Khi lọc ngày, phải gửi đầy đủ `accountId`, `from` và `to`. Cả ngày bắt đầu và kết thúc đều được tính. `page` bắt đầu từ `0`; `size` nằm trong khoảng `1` đến `100`.
+| Tham số | Hành vi |
+| --- | --- |
+| `accountId`, `categoryId` | Tùy chọn. Bỏ `accountId` để lọc trên tất cả tài khoản của user hiện tại |
+| `from`, `to` | Gửi cùng nhau theo `YYYY-MM-DD`. Khoảng lọc tính cả hai ngày, với `from <= to` |
+| `minAmount`, `maxAmount` | Gửi cùng nhau. Kết quả tính cả hai đầu mút và yêu cầu `minAmount <= maxAmount` |
+| `type`, `source` | Lọc theo loại và nguồn giao dịch |
+| `keyword` | Tìm trong ghi chú, không phân biệt chữ hoa và chữ thường |
+| `sort` | `ASC` hoặc `DESC` theo ngày giao dịch, mặc định `DESC` |
+| `page`, `size` | `page` bắt đầu từ `0`, `size` từ `1` đến `100` và mặc định là `10` |
+
+`source` gồm `MANUAL`, `RECURRING`, `DEBT_PAYMENT` và `DEBT_PAYMENT_REVERSAL`. Chỉ giao dịch `MANUAL` có thể sửa hoặc xóa trực tiếp.
 
 Response phân trang có cấu trúc ổn định:
 
@@ -232,7 +253,7 @@ Ví dụ tạo khoản tiền trọ mỗi tháng:
 }
 ```
 
-`active` dùng để tạm dừng hoặc kích hoạt lại mẫu. Khi cập nhật bằng `PATCH`, không gửi field nào thì field đó được giữ nguyên.
+`active=false` tạm dừng mẫu. `active=true` chỉ kích hoạt lại khi cả tài khoản và danh mục đang hoạt động. Khi cập nhật bằng `PATCH`, không gửi field nào thì field đó được giữ nguyên.
 
 Scheduler tự chạy khi ứng dụng khởi động và mỗi ngày lúc `00:05` theo múi giờ `Asia/Ho_Chi_Minh`. Nó tìm các mẫu `active` có `nextRunDate` đã đến hạn, tạo `Transaction` thật với ngày giao dịch bằng `nextRunDate`, sau đó dời lịch sang tháng kế tiếp. Nếu server từng tắt nhiều tháng, scheduler tạo bù toàn bộ kỳ bị lỡ trong một lần chạy.
 
@@ -266,6 +287,8 @@ openingBalance + income - expense + transferIn - transferOut
 | DELETE | `/api/budgets/{id}` | Xóa budget | 204 |
 | GET | `/api/budgets/{id}/summary` | Tổng quan một budget | 200 |
 | GET | `/api/budgets/summary?month=YYYY-MM-01` | Tổng quan mọi budget trong tháng | 200 |
+| GET | `/api/budgets/alerts?month=YYYY-MM-01` | Các budget đạt ngưỡng cảnh báo hoặc vượt hạn mức | 200 |
+| POST | `/api/budgets/copy-from-previous-month?targetMonth=YYYY-MM-01` | Sao chép budget còn thiếu từ tháng trước | 200 |
 
 ```json
 {
@@ -289,11 +312,16 @@ Ví dụ response summary:
   "spentAmount": 120000,
   "remainingAmount": -20000,
   "usagePercentage": 120.00,
-  "overBudget": true
+  "overBudget": true,
+  "status": "EXCEEDED"
 }
 ```
 
-`spentAmount` là tổng giao dịch của category trong tháng. `remainingAmount = limitAmount - spentAmount`; `overBudget` là `true` khi số đã chi lớn hơn hạn mức.
+`spentAmount` là tổng giao dịch của category trong tháng. `remainingAmount = limitAmount - spentAmount`; `overBudget` là `true` khi số đã chi lớn hơn hạn mức. Theo `usagePercentage`, `status` là `SAFE` khi dưới 80%, `WARNING` từ 80% đến 100%, và `EXCEEDED` khi trên 100%.
+
+### Dashboard
+
+`GET /api/dashboard/monthly?month=YYYY-MM-01` trả tổng thu, tổng chi, chênh lệch, số tài khoản, số ngân sách và số ngân sách vượt hạn mức trong tháng.
 
 ### Savings Goal
 
@@ -344,6 +372,7 @@ Tạo contribution làm tăng `currentAmount`; xóa contribution làm giảm l�
 | --- | --- | --- | --- |
 | GET | `/api/debts` | Danh sách khoản nợ | 200 |
 | GET | `/api/debts/{id}` | Xem một khoản nợ | 200 |
+| GET | `/api/debts/alerts?days=7` | Khoản nợ còn mở đã quá hạn hoặc sắp đến hạn | 200 |
 | POST | `/api/debts` | Tạo khoản nợ | 201 |
 | PATCH | `/api/debts/{id}` | Đổi người liên quan, hạn thanh toán hoặc ghi chú | 200 |
 | DELETE | `/api/debts/{id}` | Xóa debt chưa có payment | 204 |
@@ -367,7 +396,7 @@ Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAm
 | GET | `/api/debt-payments` | Danh sách lần thanh toán nợ | 200 |
 | GET | `/api/debt-payments/{id}` | Xem một lần thanh toán | 200 |
 | POST | `/api/debt-payments` | Tạo lần thanh toán | 201 |
-| DELETE | `/api/debt-payments/{id}` | Xóa lần thanh toán nhập sai | 204 |
+| POST | `/api/debt-payments/{id}/cancel` | Hủy lần thanh toán và tạo giao dịch đảo chiều | 200 |
 
 ```json
 {
@@ -379,9 +408,9 @@ Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAm
 }
 ```
 
-Mỗi payment làm giảm `remainingAmount`; không thể trả vượt số nợ còn lại. Khi remaining amount bằng `0`, debt chuyển `PAID`. Xóa payment sẽ cộng số tiền trở lại và đưa debt về `OPEN` nếu còn nợ.
+Mỗi payment làm giảm `remainingAmount` và sinh giao dịch `DEBT_PAYMENT`, ảnh hưởng đến số dư tài khoản. Khoản vay tạo giao dịch chi, khoản cho mượn tạo giao dịch thu khi thu hồi nợ. Khi `remainingAmount` bằng `0`, debt chuyển sang `PAID`.
 
-Ở phase hiện tại, Debt/Debt Payment dùng để theo dõi nghĩa vụ nợ và **chưa tự tạo Transaction hoặc làm thay đổi số dư Account**.
+Khi hủy, payment chuyển sang `CANCELLED`, tiền được cộng lại vào số nợ còn lại và debt trở về `OPEN`. API giữ giao dịch gốc và tạo giao dịch `DEBT_PAYMENT_REVERSAL` để đảo ảnh hưởng lên số dư. Response trả `transactionId`, `reversalTransactionId` và `cancelledAt` để đối chiếu lịch sử.
 
 ## Validation và lỗi
 

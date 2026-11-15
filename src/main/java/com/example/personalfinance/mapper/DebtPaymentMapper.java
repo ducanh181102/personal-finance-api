@@ -11,9 +11,13 @@ public class DebtPaymentMapper {
                 debtPayment.getId(),
                 debtPayment.getDebt().getId(),
                 debtPayment.getAccount().getId(),
+                debtPayment.getTransaction().getId(),
+                debtPayment.getReversalTransaction() == null ? null : debtPayment.getReversalTransaction().getId(),
                 debtPayment.getAmount(),
                 debtPayment.getPaidAt(),
-                debtPayment.getNote()
+                debtPayment.getNote(),
+                debtPayment.getStatus(),
+                debtPayment.getCancelledAt()
         );
     }
 }

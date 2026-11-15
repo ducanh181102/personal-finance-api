@@ -1,5 +1,13 @@
 # Postman — Personal Finance API
 
+## Bộ lọc giao dịch có JWT
+
+1. Import `transaction-filters.postman_collection.json` và chọn môi trường **Personal Finance - Local**.
+2. Điền `test_email` và `test_password` của user test trong môi trường local, rồi gửi **01 - Đăng nhập và lưu JWT**. Các request sau tự dùng token đã lưu.
+3. Gửi các request **02–08** để kiểm tra bộ lọc và phân trang. Tất cả dùng `GET /api/transactions/page`.
+
+Dữ liệu mẫu dùng ví `account_id=1`, có 4 giao dịch vào `sample_date=2026-11-13` và tổng cộng 200 giao dịch qua hai trang. Nếu dùng database khác, cập nhật biến của collection theo dữ liệu test tương ứng.
+
 ## Sử dụng
 
 1. Khởi động ứng dụng Spring Boot trên cổng 8080.

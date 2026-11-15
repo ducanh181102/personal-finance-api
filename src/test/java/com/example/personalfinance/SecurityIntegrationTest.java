@@ -168,6 +168,73 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void filtersTransactionsAcrossOwnAccountsIncludingBothDayBoundaries() throws Exception {
+        LocalDate day = transactionA.getTransactionDate().toLocalDate();
+        Account secondAccount = accountRepository.save(new Account("Ví thứ hai của A", "CASH", BigDecimal.ZERO, userA));
+        Transaction atStart = transactionRepository.save(new Transaction(
+                accountA, TransactionType.EXPENSE, BigDecimal.TEN, day.atStartOfDay(), "Đầu ngày", categoryA));
+        Transaction atEnd = transactionRepository.save(new Transaction(
+                secondAccount, TransactionType.EXPENSE, BigDecimal.TEN, day.atTime(23, 59, 59), "Cuối ngày", categoryA));
+        transactionRepository.save(new Transaction(
+                accountA, TransactionType.EXPENSE, BigDecimal.TEN, day.minusDays(1).atTime(23, 59, 59), "Ngày trước", categoryA));
+        transactionRepository.save(new Transaction(
+                secondAccount, TransactionType.EXPENSE, BigDecimal.TEN, day.plusDays(1).atStartOfDay(), "Ngày sau", categoryA));
+
+        mockMvc.perform(get("/api/transactions/page")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .param("from", day.toString()).param("to", day.toString())
+                        .param("sort", "ASC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content.length()").value(3))
+                .andExpect(jsonPath("$.content[0].id").value(atStart.getId()))
+                .andExpect(jsonPath("$.content[1].id").value(transactionA.getId()))
+                .andExpect(jsonPath("$.content[2].id").value(atEnd.getId()));
+
+        mockMvc.perform(get("/api/transactions/page")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .param("accountId", secondAccount.getId().toString())
+                        .param("from", day.toString()).param("to", day.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(atEnd.getId()));
+
+        mockMvc.perform(get("/api/transactions/page")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userBToken)
+                        .param("from", day.toString()).param("to", day.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void rejectsAnIncompleteTransactionDateRange() throws Exception {
+        mockMvc.perform(get("/api/transactions/page")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .param("from", "2026-11-10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Cần gửi cả ngày bắt đầu và ngày kết thúc."));
+    }
+
+    @Test
+    void rejectsAReversedTransactionDateRange() throws Exception {
+        mockMvc.perform(get("/api/transactions/page")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .param("from", "2026-11-11").param("to", "2026-11-10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Ngày bắt đầu không được sau ngày kết thúc."));
+    }
+
+    @Test
+    void rejectsAReversedTransactionAmountRange() throws Exception {
+        mockMvc.perform(get("/api/transactions/page")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .param("minAmount", "100000").param("maxAmount", "50000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Số tiền tối thiểu không được lớn hơn số tiền tối đa."));
+    }
+
+    @Test
     void preventsOwnerFromDeletingAccountThatHasTransactions() throws Exception {
         mockMvc.perform(delete("/api/accounts/{id}", accountA.getId())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))

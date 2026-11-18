@@ -73,6 +73,22 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 
 Mở địa chỉ HTTPS đã cấu hình. Caddy phục vụ giao diện và chuyển `/api` tới Spring Boot trên mạng Docker. H2 lưu vào volume `finance_data` để dữ liệu còn sau khi cập nhật hoặc khởi động lại container. Lần chạy đầu tạo database mới. Dùng lại file `deploy/.env` khi cập nhật để giữ khóa JWT và cấu hình email.
 
+### Cập nhật AWS bằng một lệnh
+
+Khi đã có VM AWS theo cấu hình ở trên, tạo file cấu hình cục bộ trên máy Mac. File này chỉ lưu địa chỉ máy chủ và đường dẫn khóa SSH, không đưa vào Git.
+
+```bash
+cp deploy/aws-deploy.local.env.example deploy/aws-deploy.local.env
+```
+
+Sửa `deploy/aws-deploy.local.env`: thay `your-name` bằng tên thư mục người dùng trên Mac, giữ `AWS_HOST` là Elastic IP hiện tại và đặt `FRONTEND_ROOT` đúng đường dẫn dự án frontend. Sau đó, mỗi lần đã sửa API hoặc client, chạy duy nhất:
+
+```bash
+./deploy/aws-deploy.sh
+```
+
+Script tự đồng bộ hai dự án, build Docker trên EC2, khởi chạy lại API/client và chờ endpoint API trả `401` khi chưa đăng nhập. Kết quả `401` ở bước cuối nghĩa là reverse proxy và bảo vệ API hoạt động đúng. `deploy/.env` và volume database H2 trên EC2 được giữ nguyên trong khi cập nhật. Để chỉ kiểm tra kết nối trước khi deploy, dùng `./deploy/aws-deploy.sh --check`.
+
 ## Xác thực và phân quyền
 
 Đăng ký, đăng nhập và khôi phục tài khoản là endpoint public. Tất cả endpoint dữ liệu khác cần JWT trong header:

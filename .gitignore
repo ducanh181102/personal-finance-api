@@ -38,3 +38,4 @@ build/
 ### Local SMTP credentials ###
 /config/mail-local.properties
 /deploy/.env
+/deploy/aws-deploy.local.env

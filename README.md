@@ -79,6 +79,10 @@ Sửa `deploy/aws-deploy.local.env`: thay `your-name` bằng tên thư mục ng�
 
 Script tự đồng bộ hai dự án, build Docker trên EC2, khởi chạy lại API/client và chờ endpoint API trả `401` khi chưa đăng nhập. Kết quả `401` ở bước cuối nghĩa là reverse proxy và bảo vệ API hoạt động đúng. `deploy/.env` và volume database H2 trên EC2 được giữ nguyên trong khi cập nhật. Để chỉ kiểm tra kết nối trước khi deploy, dùng `./deploy/aws-deploy.sh --check`.
 
+### URL miễn phí khi chưa mua domain
+
+Nếu chưa cần domain riêng, có thể dùng hostname miễn phí theo dạng `ten-goi-nho.<elastic-ip-dang-bang-dau-gach-ngang>.sslip.io`, ví dụ `financeducanh.52-63-133-86.sslip.io`. `sslip.io` tự phân giải hostname có IP nhúng về đúng Elastic IP, nên không phải tạo DNS record hay tài khoản. Đặt hostname này vào `PUBLIC_HOST` trong `deploy/.env`, sau đó chạy lại Docker Compose để Caddy cấp HTTPS. Đây phù hợp cho bản demo; hostname phụ thuộc vào dịch vụ `sslip.io` và Elastic IP hiện tại, không phải domain do bạn sở hữu.
+
 ### Sao lưu database AWS tự động
 
 Chạy một lần trên Mac để tạo bucket S3 riêng tư, mã hóa AES-256, quy tắc tự xóa backup sau 30 ngày và IAM role chỉ có quyền đọc/ghi bucket backup. Script cũng cài lịch sao lưu lúc khoảng **02:30 giờ Việt Nam** mỗi ngày.

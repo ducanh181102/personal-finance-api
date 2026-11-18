@@ -29,6 +29,38 @@ cd personal-finance-api
 
 Trên Windows dùng `mvnw.cmd spring-boot:run`. Ứng dụng mặc định chạy tại `http://localhost:8080`.
 
+## Triển khai API và frontend trên VM
+
+### Tạo VM Oracle Always Free
+
+1. Đăng ký tài khoản tại [Oracle Cloud Free Tier](https://signup.cloud.oracle.com/) và hoàn tất xác minh theo yêu cầu Oracle.
+2. Trong Cloud Console, vào **Compute → Instances → Create instance**. Chọn Ubuntu và shape `VM.Standard.A1.Flex` có nhãn **Always Free eligible**. Cấu hình 1 OCPU và 6 GB RAM đủ cho bản triển khai này. Chọn boot volume trong hạn mức Always Free.
+3. Đặt VM trong public subnet và gán public IPv4. Cho phép SSH cổng 22 từ địa chỉ của máy quản trị, cùng TCP cổng 80 và 443 cho web trong cả quy tắc mạng OCI và tường lửa của VM.
+4. Ở **Add SSH keys → Upload public key files**, dùng public key của máy quản trị. Nếu đã chuẩn bị khóa cho dự án này, file là `~/.ssh/personal-finance-oci.pub`.
+5. Khi VM ở trạng thái **Running**, ghi lại **Public IP address** và **Username**. Ubuntu thường dùng tên đăng nhập `ubuntu`.
+
+Các VM miễn phí phụ thuộc tài nguyên còn sẵn trong khu vực. [Tài nguyên Oracle Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+
+### Chạy ứng dụng
+
+Cài Docker và Docker Compose trên VM Linux. Đặt hai thư mục `personal-finance-api` và `personal-finance-frontend` cùng cấp. VM cần có địa chỉ IP công khai hoặc domain trỏ về VM và nhận kết nối TCP cổng 80 và 443 để Caddy cấp, gia hạn chứng chỉ HTTPS.
+
+Trong thư mục backend, tạo file cấu hình cục bộ với địa chỉ công khai của VM. Dùng IP hoặc hostname, ví dụ `203.0.113.10`, rồi tạo khóa JWT mới.
+
+```bash
+umask 077
+PUBLIC_HOST=203.0.113.10
+printf 'PUBLIC_HOST=%s\nJWT_SECRET=%s\n' "$PUBLIC_HOST" "$(openssl rand -base64 32)" > deploy/.env
+```
+
+Để kích hoạt quên mật khẩu, thêm `SPRING_MAIL_USERNAME` và `SPRING_MAIL_PASSWORD` vào `deploy/.env`. Khi dùng Gmail SMTP, kiểm tra VM có kết nối được tới `smtp.gmail.com:587`.
+
+```bash
+docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
+```
+
+Mở địa chỉ HTTPS đã cấu hình. Caddy phục vụ giao diện và chuyển `/api` tới Spring Boot trên mạng Docker. H2 lưu vào volume `finance_data` để dữ liệu còn sau khi cập nhật hoặc khởi động lại container. Lần chạy đầu tạo database mới. Dùng lại file `deploy/.env` khi cập nhật để giữ khóa JWT và cấu hình email.
+
 ## Xác thực và phân quyền
 
 Đăng ký, đăng nhập và khôi phục tài khoản là endpoint public. Tất cả endpoint dữ liệu khác cần JWT trong header:

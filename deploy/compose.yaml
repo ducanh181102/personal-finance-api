@@ -1,0 +1,35 @@
+name: personal-finance
+
+services:
+  api:
+    build: ..
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: deploy
+      PORT: "10000"
+      TZ: Asia/Ho_Chi_Minh
+      JWT_SECRET: ${JWT_SECRET:?Đặt JWT_SECRET trong deploy/.env}
+      PASSWORD_RESET_FRONTEND_URL: https://${PUBLIC_HOST:?Đặt PUBLIC_HOST trong deploy/.env}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+    volumes:
+      - finance_data:/var/data
+
+  client:
+    build: ../../personal-finance-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Đặt PUBLIC_HOST trong deploy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  finance_data:
+  caddy_data:
+  caddy_config:

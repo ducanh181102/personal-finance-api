@@ -37,3 +37,4 @@ build/
 
 ### Local SMTP credentials ###
 /config/mail-local.properties
+/deploy/.env

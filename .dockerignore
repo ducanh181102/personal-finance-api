@@ -1,0 +1,8 @@
+.git
+.idea
+config/mail-local.properties
+data
+target
+.env
+.env.*
+deploy/.env

@@ -70,11 +70,9 @@ public class PasswordResetService {
 
     public boolean requestReset(String email) {
         JavaMailSender sender = mailSender.getIfAvailable();
-        if (sender == null || from.isBlank()) {
-            // Ghi trạng thái cấu hình để kiểm tra lỗi 503, chỉ hiển thị các giá trị boolean.
-            log.warn("Cấu hình gửi mail chưa đầy đủ (JavaMailSender có sẵn: {}, địa chỉ người gửi đã đặt: {}). "
-                            + "Kiểm tra SPRING_MAIL_HOST và PASSWORD_RESET_FROM hoặc SPRING_MAIL_USERNAME.",
-                    sender != null, !from.isBlank());
+        if (sender == null || from.isBlank() || frontendUrl.isBlank()) {
+            log.warn("Cấu hình gửi mail chưa đầy đủ (JavaMailSender: {}, địa chỉ gửi: {}, URL frontend: {}).",
+                    sender != null, !from.isBlank(), !frontendUrl.isBlank());
             return false;
         }
 

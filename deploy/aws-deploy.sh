@@ -131,7 +131,10 @@ sudo docker compose --env-file deploy/.env -f deploy/compose.yaml ps
 REMOTE
 
 log "Chờ API sẵn sàng"
-public_url="https://$AWS_HOST"
+# Caddy cấp chứng chỉ cho PUBLIC_HOST, không phải cho IP của EC2.
+# Đọc đúng hostname đang dùng từ .env trên máy chủ để kiểm tra TLS và API.
+public_host="$(run_ssh "sed -n 's/^PUBLIC_HOST=//p' '$remote_root/personal-finance-api/deploy/.env' | tail -n 1")"
+public_url="https://${public_host:-$AWS_HOST}"
 for attempt in $(seq 1 30); do
   status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 "$public_url/api/users/me" || true)"
   if [[ "$status" == "401" ]]; then

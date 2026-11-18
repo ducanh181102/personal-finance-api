@@ -14,6 +14,8 @@ import java.util.Date;
 @Service
 public class JwtService {
 
+    static final String SESSION_VERSION_CLAIM = "sessionVersion";
+
     @Value("${jwt.secret}")
     private String secret;
 
@@ -33,19 +35,19 @@ public class JwtService {
 
         return Jwts.builder() // Tạo một JWT bằng “builder” — tức là thêm từng phần cho token.
                 .subject(user.getEmail()) // Đặt subject (viết tắt là claim sub) thành email user. Khi đọc token, ta sẽ lấy email này để biết ai gửi request.
+                .claim(SESSION_VERSION_CLAIM, user.getSessionVersion())
                 .issuedAt(now) // thời điểm token được tạo.
                 .expiration(expiration) // thời điểm token hết hạn.
                 .signWith(getSigningKey()) // Dùng secret key để ký token. Nếu ai sửa email hoặc thời hạn ở trong token, chữ ký không còn hợp lệ và server sẽ từ chối token đó.
                 .compact(); // Đóng gói tất cả thành chuỗi JWT hoàn chỉnh, gồm ba phần cách nhau bằng dấu chấm:
     }
 
-    public String extractEmail(String token) {
-        Claims claims = Jwts.parser() // tạo công cụ đọc token.
+    public Claims parseClaims(String token) {
+        return Jwts.parser() // tạo công cụ đọc token.
                 .verifyWith(getSigningKey()) // bảo công cụ dùng secret key để kiểm tra chữ ký.
                 .build()
                 .parseSignedClaims(token) // đọc token, đồng thời kiểm tra token có bị sửa hay hết hạn không.
                 .getPayload(); // lấy các claims như sub, iat, exp.
 
-        return claims.getSubject();
     }
 }

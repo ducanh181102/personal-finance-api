@@ -1,11 +1,15 @@
 package com.example.personalfinance.service;
 
+import com.example.personalfinance.exception.InvalidCredentialsException;
+import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -57,18 +61,47 @@ public class UserService {
     }
 
     @Transactional
-    public User updateUser(String name, String email, String password) {
-        User user = currentUserService.getCurrentUser();
-        if (email != null && !user.getEmail().equals(email)) {
+    public User updateUser(String name, String email, String password, String currentPassword) {
+        User user = lockCurrentUser();
+        boolean changingEmail = email != null && !user.getEmail().equals(email);
+        // Yêu cầu xác thực lại cho mọi đường dẫn có thể đổi mật khẩu hoặc địa chỉ nhận thư khôi phục.
+        if (changingEmail || password != null) verifyCurrentPassword(user, currentPassword);
+        if (changingEmail) {
+            if (email.isBlank()) throw new IllegalArgumentException("Email không được trống.");
             if (isExistEmail(email)) throw new IllegalArgumentException("Email đã tồn tại.");
             user.setEmail(email);
         }
-        user.setName(name != null ? name : user.getName());
-        if (password != null) {
-            String passwordHash = passwordEncoder.encode(password);
-            user.setPasswordHash(passwordHash);
+        if (name != null) {
+            if (name.isBlank()) throw new IllegalArgumentException("Tên tài khoản không được trống.");
+            user.setName(name.strip());
         }
+        if (password != null) setNewPassword(user, password);
         return userRepository.save(user);
+    }
+
+    @Transactional
+    public void changePassword(String currentPassword, String newPassword) {
+        User user = lockCurrentUser();
+        verifyCurrentPassword(user, currentPassword);
+        setNewPassword(user, newPassword);
+    }
+
+    private void verifyCurrentPassword(User user, String currentPassword) {
+        if (currentPassword == null || currentPassword.isBlank()) {
+            throw new IllegalArgumentException("Nhập mật khẩu hiện tại.");
+        }
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Mật khẩu hiện tại không đúng.");
+        }
+    }
+
+    private void setNewPassword(User user, String newPassword) {
+        if (newPassword.isBlank()) throw new IllegalArgumentException("Nhập mật khẩu mới.");
+        if (newPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new IllegalArgumentException("Mật khẩu tối đa 72 byte UTF-8.");
+        }
+        // User.setPasswordHash đổi sessionVersion và hủy liên kết khôi phục đã cấp trước đó.
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
     }
 
     // Đình chỉ
@@ -97,8 +130,18 @@ public class UserService {
 
     @Transactional
     public void deleteUser() {
-        User user = currentUserService.getCurrentUser();
+        User user = lockCurrentUser();
         user.deactivate();
         userRepository.save(user);
+    }
+
+    private User lockCurrentUser() {
+        User principal = currentUserService.getCurrentUser();
+        int id = principal.getId();
+        User user = userRepository.lockById(id).orElseThrow(() -> new NotFoundException(id));
+        if (!user.isActive() || !Objects.equals(user.getSessionVersion(), principal.getSessionVersion())) {
+            throw new InvalidCredentialsException("Không thể xác thực người dùng.");
+        }
+        return user;
     }
 }

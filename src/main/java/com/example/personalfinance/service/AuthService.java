@@ -5,6 +5,7 @@ import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -21,24 +22,24 @@ public class AuthService {
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
 
-    private User authentication(String email, String password) {
+    private User authenticate(Optional<User> candidate, String password) {
         String msgErr = "Tài khoản hoặc mật khẩu không đúng.";
-        Optional<User> user = userService.getUserByEmail(email);
-        if (user.isEmpty()) throw new InvalidCredentialsException(msgErr);
-        String passwordHash = user.get().getPasswordHash();
+        User user = candidate.orElseThrow(() -> new InvalidCredentialsException(msgErr));
+        String passwordHash = user.getPasswordHash();
         if (!passwordEncoder.matches(password, passwordHash))
             throw new InvalidCredentialsException(msgErr);
-        return user.get();
+        return user;
     }
 
     public User getAuthentication(String email, String password) {
-        User user = authentication(email, password);
+        User user = authenticate(userService.getUserByEmail(email), password);
         if (!user.isActive()) throw new IllegalArgumentException("Tài khoản không hoạt động");
         return user;
     }
 
+    @Transactional
     public User reactivate(String email, String password) {
-        User user = authentication(email, password);
+        User user = authenticate(userRepository.findForUpdateByEmail(email), password);
         if (user.isActive()) throw new IllegalArgumentException("Tài khoản đang hoạt động");
         user.activate();
         return userRepository.save(user);

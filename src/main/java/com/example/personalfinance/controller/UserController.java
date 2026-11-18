@@ -2,6 +2,7 @@ package com.example.personalfinance.controller;
 
 import com.example.personalfinance.dto.account.AccountResponse;
 import com.example.personalfinance.dto.category.CategoryResponse;
+import com.example.personalfinance.dto.user.ChangePasswordRequest;
 import com.example.personalfinance.dto.user.CreateUserRequest;
 import com.example.personalfinance.dto.user.UpdateUserRequest;
 import com.example.personalfinance.dto.user.UserResponse;
@@ -85,8 +86,15 @@ public class UserController {
 
     @PatchMapping("/me")
     public ResponseEntity<UserResponse> updateUser(@Valid @RequestBody UpdateUserRequest request) {
-        User user = userService.updateUser(request.getName(), request.getEmail(), request.getPassword());
+        User user = userService.updateUser(request.getName(), request.getEmail(), request.getPassword(),
+                request.getCurrentPassword());
         return ResponseEntity.ok(userMapper.toUserResponse(user));
+    }
+
+    @PatchMapping("/me/password")
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        userService.changePassword(request.currentPassword(), request.newPassword());
+        return ResponseEntity.noContent().build();
     }
 
     // Đình chỉ

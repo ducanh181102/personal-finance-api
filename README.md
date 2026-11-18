@@ -1,6 +1,6 @@
 # Personal Finance API
 
-REST API quản lý tài chính cá nhân: tài khoản, giao dịch thu chi, ngân sách, giao dịch định kỳ, chuyển tiền nội bộ, mục tiêu tiết kiệm và công nợ. Đây là đồ án học Java, Spring Boot, JPA/Hibernate và REST API.
+REST API quản lý tài chính cá nhân với giao dịch thu chi, ví, ngân sách, chuyển tiền, tiết kiệm và công nợ. API phục vụ giao diện React có báo cáo theo tháng, dự báo dòng tiền, hồ sơ người dùng và khôi phục mật khẩu qua email.
 
 ## Công nghệ
 
@@ -13,6 +13,7 @@ REST API quản lý tài chính cá nhân: tài khoản, giao dịch thu chi, ng
 | H2 | Database file cục bộ |
 | Jakarta Validation | Validation dữ liệu đầu vào |
 | Spring Security | Bảo vệ endpoint và phân quyền theo user sở hữu dữ liệu |
+| Spring Mail | Gửi email đặt lại mật khẩu qua SMTP |
 | JJWT | Tạo, kiểm tra JWT Bearer token |
 | Maven Wrapper | Build và chạy kiểm thử |
 
@@ -41,10 +42,13 @@ Authorization: Bearer <accessToken>
 | POST | `/api/users` | Đăng ký user | 201 |
 | POST | `/api/auth/login` | Đăng nhập, nhận JWT | 200 |
 | POST | `/api/auth/reactivate` | Khôi phục user đã vô hiệu hóa | 200 |
+| POST | `/api/auth/forgot-password` | Yêu cầu liên kết đặt lại qua email với `email` | 202 |
+| POST | `/api/auth/reset-password` | Đặt lại bằng `token` và `password` mới | 204 |
 | GET | `/api/users/me` | Xem user hiện tại | 200 |
 | GET | `/api/users/accounts/me` | Danh sách tài khoản đang hoạt động của user | 200 |
 | GET | `/api/users/categories/me` | Danh sách danh mục đang hoạt động của user | 200 |
-| PATCH | `/api/users/me` | Cập nhật user hiện tại | 200 |
+| PATCH | `/api/users/me` | Cập nhật tên với `name`. Khi đổi `email` hoặc gửi `password` mới, cần thêm `currentPassword`. | 200 |
+| PATCH | `/api/users/me/password` | Đổi mật khẩu với `currentPassword` và `newPassword`. Các JWT cũ hết hiệu lực. | 204 |
 | DELETE | `/api/users/me` | Vô hiệu hóa user hiện tại | 204 |
 
 Ví dụ đăng ký:
@@ -68,34 +72,80 @@ Ví dụ đăng nhập:
 
 Response login chứa `accessToken` và thông tin user, không bao giờ trả về `passwordHash`.
 
+Trang **Hồ sơ và bảo mật** lấy thông tin tài khoản qua `GET /api/users/me` khi khôi phục phiên. Để đổi tên hiển thị, gửi `{"name":"Tên mới"}` tới `PATCH /api/users/me`. Đổi tên giữ phiên hiện tại.
+
+Để đổi mật khẩu trong phiên đang đăng nhập, gửi `PATCH /api/users/me/password` cùng Bearer token và body sau.
+
+```json
+{
+  "currentPassword": "<mật khẩu hiện tại>",
+  "newPassword": "<mật khẩu mới>"
+}
+```
+
+Mật khẩu hiện tại sai trả `400` và người dùng có thể nhập lại. Khi đổi thành công, backend cập nhật `sessionVersion` và xóa token khôi phục đã cấp. Frontend đưa người dùng về trang đăng nhập, còn các JWT cũ nhận `401` khi gọi API.
+
 User chỉ có thể xem, tạo, sửa hoặc xóa dữ liệu thuộc chính họ: Account, Category, Transaction, Budget, Transfer, Savings Goal, Goal Contribution, Debt và Debt Payment. Không có token, token sai/hết hạn trả `401`; có token nhưng truy cập dữ liệu của user khác trả `403`.
 
 `DELETE /api/users/me` là **soft delete**: đặt `active = false`, không xóa lịch sử tài chính. Khi user bị vô hiệu hóa, API từ chối token của user. Gửi `email` và `oldPassword` đến `/api/auth/reactivate` để khôi phục user và nhận token mới.
 
-## Luồng dữ liệu
+### Gửi email đặt lại mật khẩu
 
-```text
-User ──< Account ──< Transaction >── Category
-  │       │                           │
-  │       ├──< RecurringTransaction >─┘
-  │       ├──< Transfer (gửi / nhận) >── Account
-  │       ├──< GoalContribution >── SavingsGoal
-  │       └──< DebtPayment >── Debt
-  │
-  ├──< SavingsGoal
-  └──< Debt
+Đặt các biến môi trường sau trước khi chạy Spring Boot. Nếu chạy từ IntelliJ, đặt chúng trong cấu hình chạy ứng dụng.
 
-Category ──< Budget (một category, một tháng)
+Ứng dụng đã đặt mặc định máy chủ Gmail, cổng 587, xác thực SMTP và STARTTLS. Để gửi bằng Gmail, bật xác minh hai bước và tạo Mật khẩu ứng dụng cho tài khoản gửi theo [hướng dẫn của Google](https://support.google.com/accounts/answer/185833?hl=vi). Trong IntelliJ, mở **Run → Edit Configurations → cấu hình Spring Boot → Environment variables**, thêm `SPRING_MAIL_USERNAME` là Gmail gửi thư và `SPRING_MAIL_PASSWORD` là Mật khẩu ứng dụng, rồi khởi động lại backend.
+
+Bạn cũng có thể đặt `spring.mail.username` và `spring.mail.password` trong `config/mail-local.properties` ở thư mục gốc dự án. Spring Boot tự đọc file này khi khởi động, file được loại khỏi Git. Các biến môi trường tương ứng được ưu tiên khi được cấu hình.
+
+| Biến môi trường | Giá trị |
+| --- | --- |
+| `SPRING_MAIL_HOST` | Mặc định `smtp.gmail.com`, có thể thay bằng máy chủ SMTP khác |
+| `SPRING_MAIL_PORT` | Mặc định `587` cho STARTTLS |
+| `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | Thông tin xác thực SMTP do nhà cung cấp cấp |
+| `PASSWORD_RESET_SMTP_AUTH` | Mặc định `true`, đặt theo yêu cầu của máy chủ SMTP |
+| `PASSWORD_RESET_SMTP_STARTTLS` | Mặc định `true`, đặt theo yêu cầu của máy chủ SMTP |
+| `PASSWORD_RESET_FROM` | Địa chỉ người gửi được nhà cung cấp cho phép, mặc định dùng `SPRING_MAIL_USERNAME` |
+| `PASSWORD_RESET_FRONTEND_URL` | URL frontend mà người nhận mở được, mặc định `http://localhost:5174`. Dùng địa chỉ Mac trong cùng Wi-Fi khi thử trên điện thoại và HTTPS khi triển khai. |
+
+Để thử cục bộ với [Mailpit](https://mailpit.axllent.org/docs/), đặt `SPRING_MAIL_HOST=127.0.0.1`, `SPRING_MAIL_PORT=1025`, `PASSWORD_RESET_FROM=no-reply@example.test`, `PASSWORD_RESET_SMTP_AUTH=false` và `PASSWORD_RESET_SMTP_STARTTLS=false`. Mở hộp thư thử tại `http://localhost:8025`.
+
+`POST /api/auth/forgot-password` trả `202` khi yêu cầu được đưa vào hàng đợi. Backend gửi thư cho tài khoản đang hoạt động và gửi lại tối đa một lần mỗi phút cho cùng tài khoản. Khi thiếu cấu hình SMTP hoặc địa chỉ gửi, API trả `503`.
+
+Email có mẫu HTML với nút **Đặt mật khẩu mới**, kèm bản văn bản dùng cùng liên kết. Backend lưu bản băm SHA-256 của token. React đọc token từ phần `#token=...` rồi gửi cùng mật khẩu mới tới API. Liên kết dùng một lần trong 15 phút. Đặt lại thành công hết hiệu lực các JWT đã cấp trước đó. [Mẫu email đặt lại mật khẩu](src/main/resources/templates/mail/password-reset.html)
+
+## Sơ đồ quan hệ dữ liệu
+
+```mermaid
+erDiagram
+    User ||..o{ Account : "sở hữu"
+    User ||..o{ Category : "sở hữu"
+    User ||..o{ SavingsGoal : "đặt mục tiêu"
+    User ||..o{ Debt : "theo dõi"
+
+    Account ||..o{ Transaction : "ghi nhận"
+    Category ||..o{ Transaction : "phân loại"
+    Account ||..o{ RecurringTransaction : "gắn với ví"
+    Category ||..o{ RecurringTransaction : "phân loại lịch"
+    Account ||..o{ Transfer : "ví gửi"
+    Account ||..o{ Transfer : "ví nhận"
+    Category ||..o{ Budget : "có ngân sách theo tháng"
+
+    SavingsGoal ||..o{ GoalContribution : "nhận khoản góp"
+    Account ||..o{ GoalContribution : "ví góp tiền"
+    Debt ||..o{ DebtPayment : "có lần thanh toán"
+    Account ||..o{ DebtPayment : "ví thanh toán"
+    Transaction ||..o| DebtPayment : "giao dịch gốc của"
+    Transaction |o..o| DebtPayment : "giao dịch đảo chiều của"
 ```
 
 - `TransactionType` chỉ có `INCOME` và `EXPENSE`.
 - Transaction phải có category cùng type với transaction.
-- Chỉ category `EXPENSE` mới tạo được budget.
+- Chỉ category `EXPENSE` mới tạo được budget, tối đa một budget cho mỗi category trong một tháng.
 - Budget không lưu số tiền đã chi; số tiền này luôn được tính từ các transaction.
-- `RecurringTransaction` là mẫu giao dịch lặp lại; nó sinh ra `Transaction` thật khi đến hạn.
+- `RecurringTransaction` là mẫu giao dịch lặp lại. Khi đến hạn, scheduler tạo `Transaction` với `source=RECURRING`. Bản ghi giao dịch không lưu khóa ngoại về mẫu.
 - `Transfer` di chuyển tiền giữa hai Account cùng thuộc một user.
 - `SavingsGoal` theo dõi một mục tiêu tiết kiệm; `GoalContribution` là từng lần góp vào mục tiêu.
-- `Debt` theo dõi khoản cho mượn hoặc đi vay; `DebtPayment` là từng lần thanh toán.
+- `DebtPayment` luôn liên kết với giao dịch thanh toán gốc qua `transaction_id`. Khi hủy thanh toán, giao dịch gốc được giữ và `reversal_transaction_id` trỏ đến giao dịch đảo chiều.
 
 ## API
 
@@ -120,6 +170,8 @@ Tất cả request có body JSON cần header `Content-Type: application/json`.
   "openingBalance": 500000
 }
 ```
+
+Khi tạo tài khoản, `type` nhận một trong các mã `CASH` (Tiền mặt), `BANK` (Ngân hàng), `E_WALLET` (Ví điện tử) và `OTHER` (Khác). API vẫn trả về giá trị đã lưu của tài khoản cũ.
 
 Danh sách mặc định chỉ trả tài khoản `ACTIVE`. Dùng `includeArchived=true` để lấy cả tài khoản `ARCHIVED`. Lưu trữ giữ nguyên lịch sử giao dịch và tạm dừng các mẫu định kỳ gắn với tài khoản.
 
@@ -323,6 +375,16 @@ Ví dụ response summary:
 
 `GET /api/dashboard/monthly?month=YYYY-MM-01` trả tổng thu, tổng chi, chênh lệch, số tài khoản, số ngân sách và số ngân sách vượt hạn mức trong tháng.
 
+### Báo cáo thu chi
+
+`GET /api/reports/monthly?month=YYYY-MM-01` trả hai kỳ `current` và `previous`. Mỗi kỳ gồm `month`, `totalIncome`, `totalExpense`, `netChange` và `categories` với `categoryId`, `categoryName`, `type`, `totalAmount`. Báo cáo cộng giao dịch của tất cả ví thuộc người dùng hiện tại, kể cả ví đã lưu trữ. Các lần chuyển tiền nội bộ thuộc lịch sử chuyển tiền.
+
+### Dự báo dòng tiền
+
+`GET /api/reports/cash-flow-forecast?days=30` yêu cầu đăng nhập và trả từ 1 đến 365 ngày, mặc định 30 ngày tính cả hôm nay theo giờ Việt Nam. Số dư đầu kỳ là tổng số dư các ví, kể cả ví đã lưu trữ. Chuyển tiền nội bộ có tổng ảnh hưởng bằng 0.
+
+Mỗi phần tử trong `days` gồm ngày, thu, chi, số dư cuối ngày dự kiến và các khoản dự kiến. API tính lịch định kỳ đang hoạt động và số tiền còn lại của khoản nợ đang mở. Khoản đến hạn trước kỳ dự báo được tính vào hôm nay và giữ ngày gốc trong `scheduledDate`. Trường `firstShortfallDate` là ngày đầu tiên có số dư cuối ngày âm, hoặc `null` khi số dư cuối ngày luôn từ 0 trở lên.
+
 ### Savings Goal
 
 | Method | Đường dẫn | Chức năng | Status thành công |
@@ -464,6 +526,9 @@ Các test hiện kiểm tra:
 - List/pagination không làm lộ Transaction hoặc Budget của user khác.
 - Không thể xóa Account đã có Transaction; Account trống xóa thành công.
 - Soft delete từ chối token cũ; khôi phục user trả token mới dùng được.
+- Đổi tên giữ phiên đăng nhập. Đổi mật khẩu yêu cầu mật khẩu hiện tại và vô hiệu hóa JWT cũ.
+- Email đặt lại có hai phiên bản HTML và văn bản cùng dùng một liên kết. Backend từ chối token hết hạn hoặc đã dùng.
+- Dự báo dòng tiền tính lịch định kỳ, công nợ và ngày đầu tiên có số dư dự kiến âm.
 - Recurring scheduler tạo bù đủ transaction bị lỡ, không xử lý mẫu đã tạm dừng và dời đúng `nextRunDate`.
 - Transfer làm số dư account gửi giảm, account nhận tăng; user khác không được dùng account không thuộc họ.
 - Savings Goal cập nhật số tiền góp và trạng thái hoàn thành; không thể xóa goal đã có contribution.
@@ -477,7 +542,7 @@ src/main/java/com/example/personalfinance/
 ├── config/       # PasswordEncoder và Spring Security configuration
 ├── dto/
 │   ├── account/      # DTO của account và báo cáo account
-│   ├── auth/         # Đăng nhập và khôi phục tài khoản
+│   ├── auth/         # Đăng nhập, khôi phục tài khoản và đặt lại mật khẩu
 │   ├── budget/       # DTO budget và budget summary
 │   ├── category/     # DTO category và category summary
 │   ├── common/       # DTO dùng chung, ví dụ PageResponse
@@ -486,6 +551,7 @@ src/main/java/com/example/personalfinance/
 │   ├── debtpayment/  # DTO thanh toán nợ
 │   ├── goalcontribution/ # DTO góp mục tiêu tiết kiệm
 │   ├── recurring/    # DTO giao dịch định kỳ
+│   ├── report/       # DTO báo cáo thu chi và dự báo dòng tiền
 │   ├── savingsgoal/  # DTO mục tiêu tiết kiệm
 │   ├── transaction/  # DTO giao dịch
 │   ├── transfer/     # DTO chuyển tiền
@@ -499,4 +565,4 @@ src/main/java/com/example/personalfinance/
 └── service/      # Nghiệp vụ
 ```
 
-Luồng xử lý chính: `Controller → Service → Repository → Database`.
+`src/main/resources/templates/mail/` chứa mẫu email HTML. Request đi qua Controller, Service và Repository để đọc hoặc ghi dữ liệu.

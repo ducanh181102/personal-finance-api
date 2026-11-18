@@ -125,7 +125,7 @@ public class RecurringTransactionService {
         ));
 
         dueRecurringTransaction.setNextRunDate(
-                dueRecurringTransaction.getNextRunDate().plusMonths(1));
+                dueRecurringTransaction.getFrequency().nextDateAfter(dueRecurringTransaction.getNextRunDate()));
 
     }
 

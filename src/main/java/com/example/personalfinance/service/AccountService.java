@@ -4,6 +4,7 @@ import com.example.personalfinance.exception.ForbiddenException;
 import com.example.personalfinance.exception.NotFoundException;
 import com.example.personalfinance.model.Account;
 import com.example.personalfinance.model.AccountStatus;
+import com.example.personalfinance.model.AccountType;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.*;
 import org.springframework.stereotype.Service;
@@ -44,9 +45,9 @@ public class AccountService {
         return account.get();
     }
 
-    public Account createAccount(String name, String type, BigDecimal openingBalance) {
+    public Account createAccount(String name, AccountType type, BigDecimal openingBalance) {
         User user = currentUserService.getCurrentUser();
-        Account account = new Account(name, type, openingBalance, user);
+        Account account = new Account(name, type.name(), openingBalance, user);
         return accountRepository.save(account);
     }
 

@@ -2,6 +2,7 @@ package com.example.personalfinance.security;
 
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.service.UserService;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -14,6 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -43,10 +45,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authorization.substring(7);
 
         try {
-            String email = jwtService.extractEmail(token);
-            Optional<User> user = userService.getUserByEmail(email);
+            Claims claims = jwtService.parseClaims(token);
+            Optional<User> user = userService.getUserByEmail(claims.getSubject());
 
-            if (user.isPresent() && user.get().isActive()) {
+            if (user.isPresent() && user.get().isActive()
+                    && Objects.equals(user.get().getSessionVersion(), claims.get(JwtService.SESSION_VERSION_CLAIM, String.class))) {
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 user.get(), // principal

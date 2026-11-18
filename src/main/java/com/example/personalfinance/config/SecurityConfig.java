@@ -94,6 +94,7 @@ public class SecurityConfig {
                                         "/api/auth/login",
                                         "/api/auth/reactivate"
                                 ).permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/api/users"

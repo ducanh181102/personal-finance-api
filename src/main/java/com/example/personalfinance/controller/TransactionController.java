@@ -43,7 +43,7 @@ public class TransactionController {
             @RequestParam(value = "from", required = false) LocalDate from,
             @RequestParam(value = "to", required = false) LocalDate to,
             @RequestParam(value = "page", defaultValue = "0") int page,
-            @RequestParam(value = "size", defaultValue = "10") int size) {
+            @RequestParam(value = "size", defaultValue = "22") int size) {
 
         Page<Transaction> transactions = transactionService.getTransactionsPage(page, size, accountId, categoryId,
                 type,

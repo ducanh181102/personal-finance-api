@@ -1,6 +1,7 @@
 package com.example.personalfinance.repository;
 
 import com.example.personalfinance.model.RecurringTransaction;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
@@ -18,4 +19,7 @@ public interface RecurringTransactionRepository extends JpaRepository<RecurringT
     List<RecurringTransaction> findByCategoryIdAndActiveTrue(int categoryId);
 
     List<RecurringTransaction> findByActiveTrueAndNextRunDateLessThanEqual(LocalDate date);
+
+    @EntityGraph(attributePaths = {"account", "category"})
+    List<RecurringTransaction> findByAccountUserIdAndActiveTrueAndNextRunDateLessThanEqual(int userId, LocalDate date);
 }

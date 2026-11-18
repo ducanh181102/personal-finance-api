@@ -1,6 +1,7 @@
 package com.example.personalfinance;
 
 import com.example.personalfinance.model.Account;
+import com.example.personalfinance.model.AccountType;
 import com.example.personalfinance.model.Budget;
 import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.Transaction;
@@ -14,6 +15,9 @@ import com.example.personalfinance.repository.UserRepository;
 import com.example.personalfinance.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -30,6 +34,7 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -121,6 +126,43 @@ class SecurityIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(accountA.getId()));
+    }
+
+    @ParameterizedTest
+    @EnumSource(AccountType.class)
+    void acceptsDefinedAccountTypes(AccountType type) throws Exception {
+        mockMvc.perform(post("/api/accounts")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Ví mới","type":"%s","openingBalance":0}
+                                """.formatted(type.name())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value(type.name()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"Tự nhập\"", "0", "\"0\"", "\"\"", "null", "true", "[\"CASH\"]"})
+    void rejectsUndefinedAccountTypes(String type) throws Exception {
+        mockMvc.perform(post("/api/accounts")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Ví mới","type":%s,"openingBalance":0}
+                                """.formatted(type)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void returnsStoredTypeForAccountCreatedBeforeTypeWasRestricted() throws Exception {
+        Account legacyAccount = accountRepository.save(
+                new Account("Ví cũ", "Thẻ nội địa", BigDecimal.ZERO, userA)
+        );
+
+        mockMvc.perform(get("/api/accounts/{id}", legacyAccount.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("Thẻ nội địa"));
     }
 
     @Test
@@ -405,6 +447,103 @@ class SecurityIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Không thể lưu trữ danh mục hệ thống."));
+    }
+
+    @Test
+    void rejectsManualTransactionWithSystemCategory() throws Exception {
+        Category systemCategory = categoryRepository.save(
+                new Category("TRẢ NỢ", TransactionType.EXPENSE, userA, true)
+        );
+        String authorization = "Bearer " + userAToken;
+
+        mockMvc.perform(get("/api/categories/{id}", systemCategory.getId())
+                        .header(HttpHeaders.AUTHORIZATION, authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.systemCategory").value(true));
+
+        mockMvc.perform(post("/api/transactions")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountId": %d,
+                                  "categoryId": %d,
+                                  "type": "EXPENSE",
+                                  "amount": 10000,
+                                  "transactionDate": "%s"
+                                }
+                                """.formatted(accountA.getId(), systemCategory.getId(), LocalDate.now().minusDays(1).atTime(12, 0))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Không thể dùng danh mục hệ thống cho giao dịch nhập tay."));
+
+        assertFalse(transactionRepository.existsByCategoryId(systemCategory.getId()));
+    }
+
+    @Test
+    void updatesDisplayNameAndKeepsCurrentSession() throws Exception {
+        String authorization = "Bearer " + userAToken;
+        mockMvc.perform(patch("/api/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"  Tên hiển thị mới  "}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Tên hiển thị mới"));
+
+        mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Tên hiển thị mới"));
+    }
+
+    @Test
+    void requiresCurrentPasswordForCredentialChangesThroughProfilePatch() throws Exception {
+        String authorization = "Bearer " + userAToken;
+        for (String payload : new String[] {
+                "{\"password\":\"replacement-test-password\"}",
+                "{\"email\":\"other@example.test\"}",
+                "{\"name\":\"Changed\",\"password\":\"replacement-test-password\",\"currentPassword\":\"wrong\"}"
+        }) {
+            mockMvc.perform(patch("/api/users/me")
+                            .header(HttpHeaders.AUTHORIZATION, authorization)
+                            .contentType(MediaType.APPLICATION_JSON).content(payload))
+                    .andExpect(status().isBadRequest());
+        }
+        mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("User A"))
+                .andExpect(jsonPath("$.email").value("security-a@example.com"));
+    }
+
+    @Test
+    void validatesCurrentPasswordAndRevokesOldSessionOnPasswordChange() throws Exception {
+        String authorization = "Bearer " + userAToken;
+        String validChange = "{\"currentPassword\":\"matkhau123\",\"newPassword\":\"replacement-test-password\"}";
+        mockMvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON).content(validChange))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(patch("/api/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validChange.replace("matkhau123", "incorrect-password")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Mật khẩu hiện tại không đúng."));
+
+        mockMvc.perform(patch("/api/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, authorization)
+                        .contentType(MediaType.APPLICATION_JSON).content(validChange))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, authorization))
+                .andExpect(status().isUnauthorized());
+        for (String password : new String[] { "matkhau123", "replacement-test-password" }) {
+            mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"email":"security-a@example.com","password":"%s"}
+                                    """.formatted(password)))
+                    .andExpect(status().is(password.equals("matkhau123") ? 401 : 200));
+        }
     }
 
     @Test

@@ -79,6 +79,9 @@ public class TransactionService {
         // Nghiệp vụ: kiểm tra account và category phải thuộc cùng 1 user
         if (account.getUser().getId() != category.getUser().getId())
             throw new IllegalArgumentException("Không cho giao dịch dùng category của user khác.");
+        if (source == TransactionSource.MANUAL && category.isSystemCategory()) {
+            throw new IllegalArgumentException("Không thể dùng danh mục hệ thống cho giao dịch nhập tay.");
+        }
         if (category.getType() != type)
             throw new IllegalArgumentException("Loại danh mục phải trùng với loại giao dịch.");
         Transaction transaction = new Transaction(account, type, amount, transactionDate, note, category, source);

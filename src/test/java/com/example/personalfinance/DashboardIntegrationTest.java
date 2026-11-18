@@ -5,11 +5,13 @@ import com.example.personalfinance.model.Budget;
 import com.example.personalfinance.model.Category;
 import com.example.personalfinance.model.Transaction;
 import com.example.personalfinance.model.TransactionType;
+import com.example.personalfinance.model.Transfer;
 import com.example.personalfinance.model.User;
 import com.example.personalfinance.repository.AccountRepository;
 import com.example.personalfinance.repository.BudgetRepository;
 import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.TransactionRepository;
+import com.example.personalfinance.repository.TransferRepository;
 import com.example.personalfinance.repository.UserRepository;
 import com.example.personalfinance.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +61,9 @@ class DashboardIntegrationTest {
 
     @Autowired
     private BudgetRepository budgetRepository;
+
+    @Autowired
+    private TransferRepository transferRepository;
 
     private User userA;
     private User userB;
@@ -150,5 +155,54 @@ class DashboardIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Phải là ngày đầu của tháng."));
+    }
+
+    @Test
+    void comparesMonthlyCategoriesAcrossOwnedWalletsIncludingArchivedWallets() throws Exception {
+        Account archived = new Account("Ví đã lưu trữ", "CASH", BigDecimal.ZERO, userA);
+        archived.archive();
+        archived = accountRepository.save(archived);
+        Account foreignAccount = accountRepository.save(new Account("Ví người khác", "CASH", BigDecimal.ZERO, userB));
+        Category food = categoryRepository.findByUserId(userA.getId()).stream()
+                .filter(category -> category.getName().equals("Ăn uống"))
+                .findFirst().orElseThrow();
+        Category personalExpense = categoryRepository.save(new Category("Chi riêng", TransactionType.EXPENSE, userB));
+        LocalDate previous = MONTH.minusMonths(1);
+        transactionRepository.saveAll(List.of(
+                new Transaction(archived, TransactionType.EXPENSE, new BigDecimal("12000.25"), MONTH.atStartOfDay(), null, food),
+                new Transaction(archived, TransactionType.EXPENSE, new BigDecimal("20000.50"), previous.atStartOfDay(), null, food),
+                new Transaction(foreignAccount, TransactionType.EXPENSE, BigDecimal.valueOf(500_000), MONTH.atStartOfDay(), null, personalExpense)
+        ));
+        Account main = accountRepository.findByUserId(userA.getId()).stream()
+                .filter(account -> account.getName().equals("Ví chính"))
+                .findFirst().orElseThrow();
+        transferRepository.save(new Transfer(main, archived, BigDecimal.valueOf(300_000), MONTH.atStartOfDay(), null));
+
+        mockMvc.perform(get("/api/reports/monthly")
+                        .param("month", MONTH.toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.current.month").value(MONTH.toString()))
+                .andExpect(jsonPath("$.current.totalIncome").value(150_000))
+                .andExpect(jsonPath("$.current.totalExpense").value(132_000.25))
+                .andExpect(jsonPath("$.current.netChange").value(17_999.75))
+                .andExpect(jsonPath("$.current.categories.length()").value(3))
+                .andExpect(jsonPath("$.current.categories[?(@.categoryId == " + food.getId() + ")].totalAmount")
+                        .value(org.hamcrest.Matchers.contains(82_000.25)))
+                .andExpect(jsonPath("$.previous.month").value(previous.toString()))
+                .andExpect(jsonPath("$.previous.totalIncome").value(0))
+                .andExpect(jsonPath("$.previous.totalExpense").value(20_000.50))
+                .andExpect(jsonPath("$.previous.netChange").value(-20_000.50))
+                .andExpect(jsonPath("$.previous.categories[0].categoryId").value(food.getId()));
+    }
+
+    @Test
+    void monthlyReportRequiresAuthenticationAndFirstDayOfMonth() throws Exception {
+        mockMvc.perform(get("/api/reports/monthly").param("month", MONTH.toString()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/reports/monthly")
+                        .param("month", MONTH.plusDays(1).toString())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isBadRequest());
     }
 }

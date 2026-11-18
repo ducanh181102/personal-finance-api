@@ -10,7 +10,9 @@ public class DebtAlertResponse {
     private final String personName;
     private final DebtType type;
     private final BigDecimal remainingAmount;
+    private final BigDecimal scheduledAmount;
     private final LocalDate dueDate;
+    private final boolean installment;
     private final long daysUntilDue;
     private final boolean overdue;
 
@@ -19,17 +21,21 @@ public class DebtAlertResponse {
             String personName,
             DebtType type,
             BigDecimal remainingAmount,
+            BigDecimal scheduledAmount,
             LocalDate dueDate,
             long daysUntilDue,
-            boolean overdue
+            boolean overdue,
+            boolean installment
     ) {
         this.debtId = debtId;
         this.personName = personName;
         this.type = type;
         this.remainingAmount = remainingAmount;
+        this.scheduledAmount = scheduledAmount;
         this.dueDate = dueDate;
         this.daysUntilDue = daysUntilDue;
         this.overdue = overdue;
+        this.installment = installment;
     }
 
     // getter cho tất cả field
@@ -50,6 +56,10 @@ public class DebtAlertResponse {
         return remainingAmount;
     }
 
+    public BigDecimal getScheduledAmount() {
+        return scheduledAmount;
+    }
+
     public LocalDate getDueDate() {
         return dueDate;
     }
@@ -60,5 +70,9 @@ public class DebtAlertResponse {
 
     public boolean isOverdue() {
         return overdue;
+    }
+
+    public boolean isInstallment() {
+        return installment;
     }
 }

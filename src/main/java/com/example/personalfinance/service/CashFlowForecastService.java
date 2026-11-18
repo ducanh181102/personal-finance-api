@@ -80,11 +80,8 @@ public class CashFlowForecastService {
                 ));
             }
         }
-        for (Debt debt : debtRepository.findByUserIdAndStatusAndDueDateLessThanEqualOrderByDueDateAsc(userId, DebtStatus.OPEN, to)) {
-            TransactionType type = debt.getType() == DebtType.BORROWED ? TransactionType.EXPENSE : TransactionType.INCOME;
-            addEvent(eventsByDate, from, new Event(
-                    Source.DEBT, debt.getId(), type, debt.getRemainingAmount(), debt.getPersonName(), debt.getDueDate(), null
-            ));
+        for (Debt debt : debtRepository.findByUserIdAndStatus(userId, DebtStatus.OPEN)) {
+            addDebtEvents(eventsByDate, from, to, debt);
         }
 
         List<Day> forecast = new ArrayList<>(days);
@@ -114,5 +111,32 @@ public class CashFlowForecastService {
         // Giữ ngày gốc để phân biệt khoản quá hạn với khoản đến hạn hôm nay.
         LocalDate forecastDate = event.scheduledDate().isBefore(from) ? from : event.scheduledDate();
         eventsByDate.computeIfAbsent(forecastDate, date -> new ArrayList<>()).add(event);
+    }
+
+    private void addDebtEvents(Map<LocalDate, List<Event>> eventsByDate, LocalDate from, LocalDate to, Debt debt) {
+        TransactionType type = debt.getType() == DebtType.BORROWED ? TransactionType.EXPENSE : TransactionType.INCOME;
+        if (!debt.hasInstallmentPlan()) {
+            if (!debt.getDueDate().isAfter(to)) {
+                addEvent(eventsByDate, from, new Event(
+                        Source.DEBT, debt.getId(), type, debt.getRemainingAmount(), debt.getPersonName(), debt.getDueDate(), null
+                ));
+            }
+            return;
+        }
+
+        BigDecimal scheduledRemaining = debt.getRemainingAmount();
+        LocalDate nextInstallmentDate = debt.getNextInstallmentDate();
+        for (LocalDate dueDate = nextInstallmentDate;
+             !dueDate.isAfter(to) && scheduledRemaining.signum() > 0;
+             dueDate = dueDate.plusMonths(1)) {
+            BigDecimal amount = dueDate.equals(nextInstallmentDate)
+                    ? debt.getNextInstallmentAmount()
+                    : scheduledRemaining.min(debt.getMonthlyInstallmentAmount());
+            addEvent(eventsByDate, from, new Event(
+                    Source.DEBT, debt.getId(), type, amount,
+                    debt.getPersonName() + " · trả góp", dueDate, null
+            ));
+            scheduledRemaining = scheduledRemaining.subtract(amount);
+        }
     }
 }

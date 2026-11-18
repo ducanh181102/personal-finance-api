@@ -51,6 +51,8 @@ public class DebtController {
                 request.getType(),
                 request.getOriginalAmount(),
                 request.getDueDate(),
+                request.getMonthlyInstallmentAmount(),
+                request.getFirstInstallmentDate(),
                 request.getNote());
         DebtResponse debtResponse = debtMapper.toDebtResponse(debt);
         return ResponseEntity.status(HttpStatus.CREATED).body(debtResponse);
@@ -59,7 +61,8 @@ public class DebtController {
     @PatchMapping("{id}")
     public ResponseEntity<DebtResponse> updateDebtById(@PathVariable("id") int id, @Valid @RequestBody UpdateDebtRequest request) {
         Debt debt = debtService.updateDebtById(id, request.getPersonName(),
-                request.getDueDate(),
+                request.getDueDate(), request.getInstallmentEnabled(),
+                request.getMonthlyInstallmentAmount(), request.getFirstInstallmentDate(),
                 request.getNote());
         DebtResponse debtResponse = debtMapper.toDebtResponse(debt);
         return ResponseEntity.ok(debtResponse);

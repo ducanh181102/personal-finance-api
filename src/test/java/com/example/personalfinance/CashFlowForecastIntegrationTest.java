@@ -143,6 +143,30 @@ class CashFlowForecastIntegrationTest {
     }
 
     @Test
+    void projectsEachMonthlyDebtInstallmentInsteadOfOneFinalDebtEvent() throws Exception {
+        LocalDate today = LocalDate.now(VIETNAM);
+        LocalDate firstInstallment = today.plusDays(2);
+        LocalDate secondInstallment = firstInstallment.plusMonths(1);
+        LocalDate finalInstallment = secondInstallment.plusMonths(1);
+        User owner = createUser("forecast-installment");
+        debtRepository.save(new Debt(owner, "Trả góp laptop", DebtType.BORROWED,
+                BigDecimal.valueOf(500), firstInstallment, null,
+                BigDecimal.valueOf(200), firstInstallment));
+
+        String firstDay = "$.days[" + ChronoUnit.DAYS.between(today, firstInstallment) + "]";
+        String secondDay = "$.days[" + ChronoUnit.DAYS.between(today, secondInstallment) + "]";
+        String finalDay = "$.days[" + ChronoUnit.DAYS.between(today, finalInstallment) + "]";
+
+        mockMvc.perform(get(PATH).param("days", "70").header(HttpHeaders.AUTHORIZATION, token(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(firstDay + ".expense").value(200))
+                .andExpect(jsonPath(firstDay + ".events[0].label").value("Trả góp laptop · trả góp"))
+                .andExpect(jsonPath(secondDay + ".expense").value(200))
+                .andExpect(jsonPath(finalDay + ".expense").value(100))
+                .andExpect(jsonPath("$.endingBalance").value(-500));
+    }
+
+    @Test
     void defaultsToThirtyDaysAndValidatesTheHorizon() throws Exception {
         User owner = createUser("forecast-empty");
         mockMvc.perform(get(PATH)).andExpect(status().isUnauthorized());

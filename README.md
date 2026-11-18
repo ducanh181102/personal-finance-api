@@ -455,7 +455,7 @@ Ví dụ response summary:
 
 `GET /api/reports/cash-flow-forecast?days=30` yêu cầu đăng nhập và trả từ 1 đến 365 ngày, mặc định 30 ngày tính cả hôm nay theo giờ Việt Nam. Số dư đầu kỳ là tổng số dư các ví, kể cả ví đã lưu trữ. Chuyển tiền nội bộ có tổng ảnh hưởng bằng 0.
 
-Mỗi phần tử trong `days` gồm ngày, thu, chi, số dư cuối ngày dự kiến và các khoản dự kiến. API tính lịch định kỳ đang hoạt động và số tiền còn lại của khoản nợ đang mở. Khoản đến hạn trước kỳ dự báo được tính vào hôm nay và giữ ngày gốc trong `scheduledDate`. Trường `firstShortfallDate` là ngày đầu tiên có số dư cuối ngày âm, hoặc `null` khi số dư cuối ngày luôn từ 0 trở lên.
+Mỗi phần tử trong `days` gồm ngày, thu, chi, số dư cuối ngày dự kiến và các khoản dự kiến. API tính lịch định kỳ đang hoạt động và số tiền còn lại của khoản nợ đang mở. Với khoản trả góp, mỗi kỳ còn lại là một khoản dự báo riêng; khoản trả một lần vẫn xuất hiện một lần ở hạn thanh toán. Khoản đến hạn trước kỳ dự báo được tính vào hôm nay và giữ ngày gốc trong `scheduledDate`. Trường `firstShortfallDate` là ngày đầu tiên có số dư cuối ngày âm, hoặc `null` khi số dư cuối ngày luôn từ 0 trở lên.
 
 ### Savings Goal
 
@@ -521,7 +521,22 @@ Tạo contribution làm tăng `currentAmount`; xóa contribution làm giảm l�
 }
 ```
 
-Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAmount` và `type` không được sửa trực tiếp sau khi tạo.
+Khoản trả một lần gửi `dueDate` như trên. Để tạo khoản trả góp hằng tháng, gửi `monthlyInstallmentAmount` và `firstInstallmentDate`; không cần gửi `dueDate` vì backend tự tính hạn cuối.
+
+```json
+{
+  "personName": "Cửa hàng laptop",
+  "type": "BORROWED",
+  "originalAmount": 12000000,
+  "monthlyInstallmentAmount": 1000000,
+  "firstInstallmentDate": "2026-12-10",
+  "note": "Trả góp 12 kỳ"
+}
+```
+
+Response của khoản trả góp có thêm `monthlyInstallmentAmount`, `firstInstallmentDate`, `nextInstallmentDate`, `nextInstallmentAmount` và `installmentCount`. Cảnh báo cũng dùng ngày/số tiền của kỳ kế tiếp. `PATCH /api/debts/{id}` nhận `installmentEnabled`, `monthlyInstallmentAmount`, `firstInstallmentDate` để bật hoặc đổi lịch; không thể đổi lịch khi đã có payment. Gửi `installmentEnabled: false` cùng `dueDate` để chuyển lại khoản trả một lần.
+
+Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAmount` và `type` không được sửa trực tiếp sau khi tạo. Lịch trả góp chỉ là kế hoạch/cảnh báo, không tự tạo giao dịch hay trừ tiền. Mỗi lần trả vẫn phải gọi API Debt Payment; lần đó mới cập nhật ví và giảm dư nợ.
 
 ### Debt Payment
 
@@ -605,6 +620,7 @@ Các test hiện kiểm tra:
 - Transfer làm số dư account gửi giảm, account nhận tăng; user khác không được dùng account không thuộc họ.
 - Savings Goal cập nhật số tiền góp và trạng thái hoàn thành; không thể xóa goal đã có contribution.
 - Debt Payment cập nhật số nợ còn lại, đóng/mở debt đúng lúc, chặn trả vượt nợ và chặn user khác truy cập.
+- Khoản trả góp suy ra kỳ kế tiếp, tính đúng phần còn thiếu khi trả một phần kỳ, cảnh báo theo kỳ và tách từng kỳ trong dự báo dòng tiền.
 
 ## Cấu trúc source
 

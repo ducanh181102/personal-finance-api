@@ -14,6 +14,11 @@ public class DebtMapper {
                 debt.getOriginalAmount(),
                 debt.getRemainingAmount(),
                 debt.getDueDate(),
+                debt.getMonthlyInstallmentAmount(),
+                debt.getFirstInstallmentDate(),
+                debt.getNextInstallmentDate(),
+                debt.getNextInstallmentAmount(),
+                debt.getInstallmentCount(),
                 debt.getStatus(),
                 debt.getNote()
         );

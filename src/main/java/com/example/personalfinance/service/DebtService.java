@@ -15,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -51,20 +53,57 @@ public class DebtService {
                            DebtType type,
                            BigDecimal originalAmount,
                            LocalDate dueDate,
+                           BigDecimal monthlyInstallmentAmount,
+                           LocalDate firstInstallmentDate,
                            String note) {
+        boolean installmentRequested = monthlyInstallmentAmount != null || firstInstallmentDate != null;
+        if (!installmentRequested && dueDate == null) {
+            throw new IllegalArgumentException("Hạn thanh toán không được để trống.");
+        }
+        if (installmentRequested && (monthlyInstallmentAmount == null || firstInstallmentDate == null)) {
+            throw new IllegalArgumentException("Cần gửi đủ số tiền mỗi tháng và ngày trả kỳ đầu.");
+        }
 
-
-        Debt debt = new Debt(currentUserService.getCurrentUser(), personName, type, originalAmount, dueDate, note);
+        // Constructor tự suy ra hạn cuối từ ngày kỳ đầu và số kỳ trả góp.
+        Debt debt = new Debt(currentUserService.getCurrentUser(), personName, type, originalAmount,
+                dueDate == null ? firstInstallmentDate : dueDate, note,
+                monthlyInstallmentAmount, firstInstallmentDate);
         return debtRepository.save(debt);
     }
 
-    public Debt updateDebtById(int id, String personName, LocalDate dueDate, String note) {
+    public Debt updateDebtById(int id,
+                               String personName,
+                               LocalDate dueDate,
+                               Boolean installmentEnabled,
+                               BigDecimal monthlyInstallmentAmount,
+                               LocalDate firstInstallmentDate,
+                               String note) {
         Debt debt = getDebtById(id);
         if (personName != null) {
             debt.setPersonName(personName);
         }
 
-        if (dueDate != null) {
+        if (installmentEnabled != null) {
+            boolean planChanged = debt.hasInstallmentPlan() != installmentEnabled
+                    || (installmentEnabled && (!Objects.equals(debt.getMonthlyInstallmentAmount(), monthlyInstallmentAmount)
+                    || !Objects.equals(debt.getFirstInstallmentDate(), firstInstallmentDate)));
+            if (planChanged && debtPaymentRepository.existsByDebtId(id)) {
+                throw new IllegalArgumentException("Không thể đổi lịch trả góp sau khi đã có thanh toán.");
+            }
+
+            if (installmentEnabled) {
+                debt.configureInstallmentPlan(monthlyInstallmentAmount, firstInstallmentDate);
+            } else {
+                if (dueDate == null) {
+                    throw new IllegalArgumentException("Hạn thanh toán không được để trống.");
+                }
+                debt.configureInstallmentPlan(null, null);
+                debt.setDueDate(dueDate);
+            }
+        } else if (dueDate != null) {
+            if (debt.hasInstallmentPlan()) {
+                throw new IllegalArgumentException("Lịch trả góp tự tính hạn cuối. Hãy chỉnh ngày trả kỳ đầu.");
+            }
             debt.setDueDate(dueDate);
         }
 
@@ -90,17 +129,19 @@ public class DebtService {
 
         LocalDate today = LocalDate.now();
         LocalDate lastAlertDate = today.plusDays(days);
-        List<Debt> debts = debtRepository.findByUserIdAndStatusAndDueDateLessThanEqualOrderByDueDateAsc(
-                currentUserService.getCurrentUser().getId(),
-                DebtStatus.OPEN,
-                lastAlertDate
+        List<Debt> debts = debtRepository.findByUserIdAndStatus(
+                currentUserService.getCurrentUser().getId(), DebtStatus.OPEN
         );
 
         return debts.stream().map(
                 debt -> {
+                    LocalDate nextDueDate = debt.hasInstallmentPlan()
+                            ? debt.getNextInstallmentDate() : debt.getDueDate();
+                    BigDecimal scheduledAmount = debt.hasInstallmentPlan()
+                            ? debt.getNextInstallmentAmount() : debt.getRemainingAmount();
                     long daysUntilDue = ChronoUnit.DAYS.between(
                             today,
-                            debt.getDueDate()
+                            nextDueDate
                     );
                     boolean overdue = daysUntilDue < 0;
                     return new DebtAlertResponse(
@@ -108,10 +149,14 @@ public class DebtService {
                             debt.getPersonName(),
                             debt.getType(),
                             debt.getRemainingAmount(),
-                            debt.getDueDate(),
-                            daysUntilDue, overdue
+                            scheduledAmount,
+                            nextDueDate,
+                            daysUntilDue, overdue,
+                            debt.hasInstallmentPlan()
                     );
                 }
-        ).toList();
+        ).filter(alert -> !alert.getDueDate().isAfter(lastAlertDate))
+                .sorted(Comparator.comparing(DebtAlertResponse::getDueDate).thenComparingInt(DebtAlertResponse::getDebtId))
+                .toList();
     }
 }

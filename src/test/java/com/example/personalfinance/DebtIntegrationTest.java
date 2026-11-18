@@ -156,6 +156,78 @@ class DebtIntegrationTest {
     }
 
     @Test
+    void createsMonthlyInstallmentPlanAndMovesNextDueDateAfterPayment() throws Exception {
+        LocalDate firstInstallmentDate = LocalDate.now().plusDays(2);
+        mockMvc.perform(post("/api/debts")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "personName": "Cửa hàng laptop",
+                                  "type": "BORROWED",
+                                  "originalAmount": 2500,
+                                  "monthlyInstallmentAmount": 1000,
+                                  "firstInstallmentDate": "%s"
+                                }
+                                """.formatted(firstInstallmentDate)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.monthlyInstallmentAmount").value(1000))
+                .andExpect(jsonPath("$.firstInstallmentDate").value(firstInstallmentDate.toString()))
+                .andExpect(jsonPath("$.nextInstallmentDate").value(firstInstallmentDate.toString()))
+                .andExpect(jsonPath("$.nextInstallmentAmount").value(1000))
+                .andExpect(jsonPath("$.installmentCount").value(3))
+                .andExpect(jsonPath("$.dueDate").value(firstInstallmentDate.plusMonths(2).toString()));
+
+        Debt installmentDebt = debtRepository.findAll().stream()
+                .filter(debt -> debt.getPersonName().equals("Cửa hàng laptop"))
+                .findFirst().orElseThrow();
+        createPayment(installmentDebt.getId(), accountA.getId(), 1_000)
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/debts/{id}", installmentDebt.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.remainingAmount").value(1500))
+                .andExpect(jsonPath("$.nextInstallmentDate").value(firstInstallmentDate.plusMonths(1).toString()))
+                .andExpect(jsonPath("$.nextInstallmentAmount").value(1000));
+    }
+
+    @Test
+    void keepsTheSameInstallmentDueDateUntilItsPartialPaymentIsCompleted() throws Exception {
+        LocalDate firstInstallmentDate = LocalDate.now().plusDays(2);
+        Debt debt = debtRepository.save(new Debt(userA, "Người cho vay", DebtType.BORROWED,
+                new BigDecimal("2500"), firstInstallmentDate, null,
+                new BigDecimal("1000"), firstInstallmentDate));
+
+        debt.applyPayment(new BigDecimal("400"));
+        debtRepository.save(debt);
+
+        mockMvc.perform(get("/api/debts/{id}", debt.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextInstallmentDate").value(firstInstallmentDate.toString()))
+                .andExpect(jsonPath("$.nextInstallmentAmount").value(600));
+    }
+
+    @Test
+    void alertsUseTheNextInstallmentInsteadOfTheFinalDueDate() throws Exception {
+        LocalDate firstInstallmentDate = LocalDate.now().plusDays(3);
+        Debt installmentDebt = debtRepository.save(new Debt(
+                userA, "Trả góp điện thoại", DebtType.BORROWED, BigDecimal.valueOf(900),
+                firstInstallmentDate, null, BigDecimal.valueOf(300), firstInstallmentDate
+        ));
+
+        mockMvc.perform(get("/api/debts/alerts")
+                        .param("days", "7")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].debtId").value(installmentDebt.getId()))
+                .andExpect(jsonPath("$[0].dueDate").value(firstInstallmentDate.toString()))
+                .andExpect(jsonPath("$[0].scheduledAmount").value(300))
+                .andExpect(jsonPath("$[0].installment").value(true));
+    }
+
+    @Test
     void paymentReducesDebtAndMarksPaidWhenFullyPaid() throws Exception {
         createPayment(debtA.getId(), accountA.getId(), 300)
                 .andExpect(status().isCreated());

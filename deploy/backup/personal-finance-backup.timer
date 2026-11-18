@@ -1,0 +1,10 @@
+[Unit]
+Description=Chạy sao lưu Personal Finance hằng ngày
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Ho_Chi_Minh
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

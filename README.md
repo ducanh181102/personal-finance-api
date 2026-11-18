@@ -79,6 +79,24 @@ Sửa `deploy/aws-deploy.local.env`: thay `your-name` bằng tên thư mục ng�
 
 Script tự đồng bộ hai dự án, build Docker trên EC2, khởi chạy lại API/client và chờ endpoint API trả `401` khi chưa đăng nhập. Kết quả `401` ở bước cuối nghĩa là reverse proxy và bảo vệ API hoạt động đúng. `deploy/.env` và volume database H2 trên EC2 được giữ nguyên trong khi cập nhật. Để chỉ kiểm tra kết nối trước khi deploy, dùng `./deploy/aws-deploy.sh --check`.
 
+### Sao lưu database AWS tự động
+
+Chạy một lần trên Mac để tạo bucket S3 riêng tư, mã hóa AES-256, quy tắc tự xóa backup sau 30 ngày và IAM role chỉ có quyền đọc/ghi bucket backup. Script cũng cài lịch sao lưu lúc khoảng **02:30 giờ Việt Nam** mỗi ngày.
+
+```bash
+./deploy/aws-backup-setup.sh
+```
+
+Khi chạy backup, service chỉ dừng container API trong ít phút để H2 đóng file an toàn; giao diện vẫn tải được nhưng các lời gọi `/api` tạm thời không hoạt động. Sau đó service nén volume `finance_data`, tải bản sao lên S3 và khởi động API lại. Backup cục bộ giữ 7 ngày để phục hồi nhanh, S3 giữ 30 ngày. Không có access key AWS nào được lưu trên EC2: quyền S3 đến từ IAM role gắn trực tiếp với máy chủ.
+
+Kiểm tra lịch chạy hoặc chạy thử thủ công qua SSH:
+
+```bash
+sudo systemctl list-timers personal-finance-backup.timer
+sudo systemctl start personal-finance-backup.service
+sudo journalctl -u personal-finance-backup.service -n 50 --no-pager
+```
+
 ## Xác thực và phân quyền
 
 Đăng ký, đăng nhập và khôi phục tài khoản là endpoint public. Tất cả endpoint dữ liệu khác cần JWT trong header:

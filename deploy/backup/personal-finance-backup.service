@@ -1,0 +1,12 @@
+[Unit]
+Description=Sao lưu Personal Finance H2 sang Amazon S3
+Wants=network-online.target
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/personal-finance-backup.env
+ExecStart=/usr/local/sbin/personal-finance-backup
+TimeoutStartSec=10min

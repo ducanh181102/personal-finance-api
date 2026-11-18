@@ -43,16 +43,6 @@ Với tài khoản theo **Sign up for AWS (new)**, dùng region AWS đã gán ch
 
 Chi phí máy chủ, ổ đĩa, IPv4 và lưu lượng được tính theo tài nguyên sử dụng và trừ vào credit nếu đủ điều kiện. Dùng cùng cấu hình Docker Compose bên dưới để chạy API, frontend và database H2 lưu file. Kiểm tra lại số credit trong quá trình sử dụng.
 
-### Tạo VM Oracle Always Free
-
-1. Đăng ký tài khoản tại [Oracle Cloud Free Tier](https://signup.cloud.oracle.com/) và hoàn tất xác minh theo yêu cầu Oracle.
-2. Trong Cloud Console, vào **Compute → Instances → Create instance**. Chọn Ubuntu và shape `VM.Standard.A1.Flex` có nhãn **Always Free eligible**. Cấu hình 1 OCPU và 6 GB RAM đủ cho bản triển khai này. Chọn boot volume trong hạn mức Always Free.
-3. Đặt VM trong public subnet và gán public IPv4. Cho phép SSH cổng 22 từ địa chỉ của máy quản trị, cùng TCP cổng 80 và 443 cho web trong cả quy tắc mạng OCI và tường lửa của VM.
-4. Ở **Add SSH keys → Upload public key files**, dùng public key của máy quản trị. Nếu đã chuẩn bị khóa cho dự án này, file là `~/.ssh/personal-finance-oci.pub`.
-5. Khi VM ở trạng thái **Running**, ghi lại **Public IP address** và **Username**. Ubuntu thường dùng tên đăng nhập `ubuntu`.
-
-Các VM miễn phí phụ thuộc tài nguyên còn sẵn trong khu vực. [Tài nguyên Oracle Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
-
 ### Chạy ứng dụng
 
 Cài Docker và Docker Compose trên VM Linux. Đặt hai thư mục `personal-finance-api` và `personal-finance-frontend` cùng cấp. VM cần có địa chỉ IP công khai hoặc domain trỏ về VM và nhận kết nối TCP cổng 80 và 443 để Caddy cấp, gia hạn chứng chỉ HTTPS.

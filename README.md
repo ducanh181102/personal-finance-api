@@ -31,6 +31,18 @@ Trên Windows dùng `mvnw.cmd spring-boot:run`. Ứng dụng mặc định chạ
 
 ## Triển khai API và frontend trên VM
 
+### Tạo VM AWS EC2
+
+1. Kiểm tra **Billing and Cost Management → Free Tier / Credits** để biết số credit và thời hạn còn lại. Với Free plan dùng credit, nhãn **Free tier eligible** không có nghĩa máy chủ được chạy miễn phí vô thời hạn. Xem [AWS Free Tier cho EC2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html).
+2. Trong **EC2 → Launch instance**, đặt tên `personal-finance`. Chọn **Ubuntu Server 24.04 LTS**, kiến trúc **64-bit (Arm)** và instance type **t4g.small** với 2 vCPU, 2 GiB RAM. Các Dockerfile của hai dự án hỗ trợ ARM64.
+3. Dùng ổ đĩa **20 GiB gp3** và kết nối mạng công khai. Tạo security group riêng cho ứng dụng, cho phép TCP **80/443** từ internet và SSH **22** chỉ từ IP của máy quản trị. Backend và database được truy cập qua mạng Docker bên trong VM.
+4. Dùng public key của máy quản trị trong **EC2 → Network & Security → Key Pairs → Actions → Import key pair**, rồi chọn key này khi tạo instance. Khóa riêng giữ trên máy quản trị. Ubuntu dùng tên đăng nhập SSH `ubuntu`.
+5. Khi instance chạy và qua kiểm tra trạng thái, ghi lại public IP. Nếu cần giữ địa chỉ sau khi dừng/bật máy chủ, gán một **Elastic IP** và dùng địa chỉ đó cho `PUBLIC_HOST` bên dưới. [Đơn giá public IPv4](https://aws.amazon.com/vpc/pricing/).
+
+Với tài khoản theo **Sign up for AWS (new)**, dùng region AWS đã gán cho project trong cả Console và AWS CLI. Có thể dùng `deploy/ubuntu-bootstrap.sh` làm **User data** khi tạo VM Ubuntu mới để tự cài Docker từ kho chính thức và tạo 2 GiB swap phục vụ build. Script này chạy bằng quyền root trên VM Ubuntu.
+
+Chi phí máy chủ, ổ đĩa, IPv4 và lưu lượng được tính theo tài nguyên sử dụng và trừ vào credit nếu đủ điều kiện. Dùng cùng cấu hình Docker Compose bên dưới để chạy API, frontend và database H2 lưu file. Kiểm tra lại số credit trong quá trình sử dụng.
+
 ### Tạo VM Oracle Always Free
 
 1. Đăng ký tài khoản tại [Oracle Cloud Free Tier](https://signup.cloud.oracle.com/) và hoàn tất xác minh theo yêu cầu Oracle.

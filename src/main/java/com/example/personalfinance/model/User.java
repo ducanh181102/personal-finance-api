@@ -25,6 +25,32 @@ public class User {
     private Instant passwordResetExpiresAt;
     @Column(length = 36)
     private String sessionVersion;
+    private Instant emailVerifiedAt;
+    @Column(unique = true, length = 64)
+    private String emailVerifyHash;
+    private Instant emailVerifyExpiresAt;
+
+    public void setEmailVerifyExpiresAt(Instant emailVerifyExpiresAt) {
+        this.emailVerifyExpiresAt = emailVerifyExpiresAt;
+    }
+
+    public void markEmailVerified(Instant now) {
+        emailVerifiedAt = now;
+        emailVerifyHash = null;
+        emailVerifyExpiresAt = null;
+    }
+
+    public Instant getEmailVerifyExpiresAt() {
+        return emailVerifyExpiresAt;
+    }
+
+    public Instant getEmailVerifiedAt() {
+        return emailVerifiedAt;
+    }
+
+    public void setEmailVerifiedAt(Instant emailVerifiedAt) {
+        this.emailVerifiedAt = emailVerifiedAt;
+    }
 
     public boolean isActive() {
         return active;
@@ -46,6 +72,7 @@ public class User {
         this.name = name;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.sessionVersion = UUID.randomUUID().toString();
     }
 
     public void setName(String name) {
@@ -54,7 +81,9 @@ public class User {
 
     public void setEmail(String email) {
         this.email = email;
+        this.sessionVersion = UUID.randomUUID().toString();
         clearPasswordReset();
+        clearEmailVerify();
     }
 
     public void setPasswordHash(String passwordHash) {
@@ -68,9 +97,20 @@ public class User {
         passwordResetExpiresAt = expiresAt;
     }
 
+    public void issueEmailVerify(String hash, Instant expiresAt) {
+        emailVerifyHash = hash;
+        emailVerifyExpiresAt = expiresAt;
+    }
+
     private void clearPasswordReset() {
         passwordResetHash = null;
         passwordResetExpiresAt = null;
+    }
+
+    private void clearEmailVerify() {
+        emailVerifiedAt = null;
+        emailVerifyHash = null;
+        emailVerifyExpiresAt = null;
     }
 
     @JsonIgnore

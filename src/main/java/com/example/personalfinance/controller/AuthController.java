@@ -1,24 +1,21 @@
 package com.example.personalfinance.controller;
 
-import com.example.personalfinance.dto.auth.LoginRequest;
-import com.example.personalfinance.dto.auth.ForgotPasswordRequest;
-import com.example.personalfinance.dto.auth.LoginResponse;
-import com.example.personalfinance.dto.auth.ReactivateRequest;
-import com.example.personalfinance.dto.auth.ReactivateResponse;
-import com.example.personalfinance.dto.auth.ResetPasswordRequest;
+import com.example.personalfinance.dto.auth.*;
+import com.example.personalfinance.dto.user.UserResponse;
 import com.example.personalfinance.mapper.UserMapper;
 import com.example.personalfinance.model.User;
+import com.example.personalfinance.security.BrowserSessionCookie;
 import com.example.personalfinance.security.JwtService;
 import com.example.personalfinance.service.AuthService;
+import com.example.personalfinance.service.EmailVerifyService;
 import com.example.personalfinance.service.PasswordResetService;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -28,13 +25,17 @@ public class AuthController {
     private final UserMapper userMapper;
     private final JwtService jwtService;
     private final PasswordResetService passwordResetService;
+    private final BrowserSessionCookie sessionCookie;
+    private final EmailVerifyService emailVerifyService;
 
     public AuthController(AuthService authService, UserMapper userMapper, JwtService jwtService,
-                          PasswordResetService passwordResetService) {
+                          PasswordResetService passwordResetService, BrowserSessionCookie sessionCookie, EmailVerifyService emailVerifyService) {
         this.authService = authService;
         this.userMapper = userMapper;
         this.jwtService = jwtService;
         this.passwordResetService = passwordResetService;
+        this.sessionCookie = sessionCookie;
+        this.emailVerifyService = emailVerifyService;
     }
 
     @PostMapping("/login")
@@ -42,6 +43,27 @@ public class AuthController {
         User user = authService.getAuthentication(request.getEmail(), request.getPassword());
         String token = jwtService.generateToken(user);
         return new LoginResponse(token, userMapper.toUserResponse(user));
+    }
+
+    @GetMapping("/csrf")
+    public ResponseEntity<Void> csrf(CsrfToken token) {
+        // Spring tạo và gửi cookie CSRF khi token được đọc lần đầu.
+        token.getToken();
+        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+
+    @PostMapping("/session")
+    public ResponseEntity<UserResponse> startSession(@Valid @RequestBody LoginRequest request) {
+        User user = authService.getAuthentication(request.getEmail(), request.getPassword());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.SET_COOKIE, sessionCookie.issue(jwtService.generateToken(user)))
+                .body(userMapper.toUserResponse(user));
+    }
+
+    @DeleteMapping("/session")
+    public ResponseEntity<Void> endSession() {
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, sessionCookie.clear()).build();
     }
 
     @PostMapping("/reactivate")
@@ -59,8 +81,20 @@ public class AuthController {
     }
 
     @PostMapping("/reset-password")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         passwordResetService.resetPassword(request.token(), request.password());
+        return endSession();
+    }
+
+    @PostMapping("/request-verify-email")
+    public ResponseEntity<Void> requestVerifyEmail(@Valid @RequestBody RequestVerifyEmailRequest request) {
+        emailVerifyService.requestVerify(request.email());
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        emailVerifyService.verifyEmail(request.token());
+        return ResponseEntity.accepted().build();
     }
 }

@@ -19,6 +19,7 @@ public class DebtMapper {
                 debt.getNextInstallmentDate(),
                 debt.getNextInstallmentAmount(),
                 debt.getInstallmentCount(),
+                debt.isInstallmentEmailReminderEnabled(),
                 debt.getStatus(),
                 debt.getNote()
         );

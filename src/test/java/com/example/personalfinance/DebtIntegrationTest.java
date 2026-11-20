@@ -152,6 +152,7 @@ class DebtIntegrationTest {
                 .andExpect(jsonPath("$.type").value("BORROWED"))
                 .andExpect(jsonPath("$.originalAmount").value(500))
                 .andExpect(jsonPath("$.remainingAmount").value(500))
+                .andExpect(jsonPath("$.installmentEmailReminderEnabled").value(false))
                 .andExpect(jsonPath("$.status").value("OPEN"));
     }
 
@@ -167,6 +168,7 @@ class DebtIntegrationTest {
                                   "type": "BORROWED",
                                   "originalAmount": 2500,
                                   "monthlyInstallmentAmount": 1000,
+                                  "installmentEmailReminderEnabled": true,
                                   "firstInstallmentDate": "%s"
                                 }
                                 """.formatted(firstInstallmentDate)))
@@ -175,6 +177,7 @@ class DebtIntegrationTest {
                 .andExpect(jsonPath("$.firstInstallmentDate").value(firstInstallmentDate.toString()))
                 .andExpect(jsonPath("$.nextInstallmentDate").value(firstInstallmentDate.toString()))
                 .andExpect(jsonPath("$.nextInstallmentAmount").value(1000))
+                .andExpect(jsonPath("$.installmentEmailReminderEnabled").value(true))
                 .andExpect(jsonPath("$.installmentCount").value(3))
                 .andExpect(jsonPath("$.dueDate").value(firstInstallmentDate.plusMonths(2).toString()));
 
@@ -190,6 +193,14 @@ class DebtIntegrationTest {
                 .andExpect(jsonPath("$.remainingAmount").value(1500))
                 .andExpect(jsonPath("$.nextInstallmentDate").value(firstInstallmentDate.plusMonths(1).toString()))
                 .andExpect(jsonPath("$.nextInstallmentAmount").value(1000));
+
+        mockMvc.perform(patch("/api/debts/{id}", installmentDebt.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"installmentEmailReminderEnabled\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.installmentEmailReminderEnabled").value(false))
+                .andExpect(jsonPath("$.nextInstallmentDate").value(firstInstallmentDate.plusMonths(1).toString()));
     }
 
     @Test

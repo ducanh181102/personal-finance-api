@@ -18,6 +18,7 @@ public class DebtResponse {
     private final LocalDate nextInstallmentDate;
     private final BigDecimal nextInstallmentAmount;
     private final long installmentCount;
+    private final boolean installmentEmailReminderEnabled;
     private final DebtStatus status;
     private final String note;
 
@@ -32,6 +33,7 @@ public class DebtResponse {
                         LocalDate nextInstallmentDate,
                         BigDecimal nextInstallmentAmount,
                         long installmentCount,
+                        boolean installmentEmailReminderEnabled,
                         DebtStatus status,
                         String note) {
         this.id = id;
@@ -45,6 +47,7 @@ public class DebtResponse {
         this.nextInstallmentDate = nextInstallmentDate;
         this.nextInstallmentAmount = nextInstallmentAmount;
         this.installmentCount = installmentCount;
+        this.installmentEmailReminderEnabled = installmentEmailReminderEnabled;
         this.status = status;
         this.note = note;
     }
@@ -91,6 +94,10 @@ public class DebtResponse {
 
     public long getInstallmentCount() {
         return installmentCount;
+    }
+
+    public boolean isInstallmentEmailReminderEnabled() {
+        return installmentEmailReminderEnabled;
     }
 
     public DebtStatus getStatus() {

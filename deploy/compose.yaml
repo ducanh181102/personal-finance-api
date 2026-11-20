@@ -10,8 +10,11 @@ services:
       TZ: Asia/Ho_Chi_Minh
       JWT_SECRET: ${JWT_SECRET:?Đặt JWT_SECRET trong deploy/.env}
       PASSWORD_RESET_FRONTEND_URL: https://${PUBLIC_HOST:?Đặt PUBLIC_HOST trong deploy/.env}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: "${SPRING_MAIL_PORT:-587}"
       SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
       SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      PASSWORD_RESET_FROM: ${PASSWORD_RESET_FROM:-${SPRING_MAIL_USERNAME:-}}
     volumes:
       - finance_data:/var/data
 

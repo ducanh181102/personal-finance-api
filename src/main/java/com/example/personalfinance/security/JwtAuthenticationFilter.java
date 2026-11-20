@@ -20,12 +20,21 @@ import java.util.Optional;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final String BEARER_PREFIX = "Bearer ";
+
     private final JwtService jwtService;
     private final UserService userService;
+    private final BrowserSessionCookie sessionCookie;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserService userService) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserService userService, BrowserSessionCookie sessionCookie) {
         this.jwtService = jwtService;
         this.userService = userService;
+        this.sessionCookie = sessionCookie;
+    }
+
+    public static boolean usesBearerToken(HttpServletRequest request) {
+        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+        return authorization != null && authorization.startsWith(BEARER_PREFIX);
     }
 
     @Override
@@ -35,14 +44,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
-
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
+        // Bearer được chọn trước cookie để request API dùng đúng phiên mà client chỉ định.
+        String token = usesBearerToken(request)
+                ? request.getHeader(HttpHeaders.AUTHORIZATION).substring(BEARER_PREFIX.length())
+                : sessionCookie.read(request);
+        if (token == null || token.isBlank()) {
             filterChain.doFilter(request, response);
             return;
         }
-
-        String token = authorization.substring(7);
 
         try {
             Claims claims = jwtService.parseClaims(token);

@@ -1,8 +1,10 @@
 package com.example.personalfinance.config;
 
+import com.example.personalfinance.security.BrowserSessionCookie;
 import com.example.personalfinance.security.JwtAuthenticationFilter;
 import com.example.personalfinance.security.JwtService;
 import com.example.personalfinance.service.UserService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,6 +17,10 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 // @Configuration nói với Spring: đây là class cấu hình, không phải controller hay service.
 // Khi ứng dụng khởi động, Spring đọc class này để biết:
@@ -55,16 +61,29 @@ public class SecurityConfig {
     // @Bean bảo Spring: hãy gọi method này lúc khởi động, lấy object trả về và dùng nó làm cấu hình bảo mật.
     // SecurityFilterChain là chuỗi các filter xử lý request trước controller.
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                    BrowserSessionCookie sessionCookie,
+                                                    @Value("${app.auth.secure-cookies:false}") boolean secureCookies)
+            throws Exception {
 
-        // Tạo filter JWT và truyền vào hai dependency nó cần.
         JwtAuthenticationFilter jwtAuthenticationFilter =
-                new JwtAuthenticationFilter(jwtService, userService);
+                new JwtAuthenticationFilter(jwtService, userService, sessionCookie);
+
+        RequestMatcher browserSession = PathPatternRequestMatcher.withDefaults().matcher("/api/auth/session");
+        CookieCsrfTokenRepository csrfTokens = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfTokens.setCookieName(secureCookies ? "__Host-finance-csrf" : "finance-csrf");
+        csrfTokens.setCookieCustomizer(cookie -> cookie.path("/").secure(secureCookies).sameSite("Lax"));
 
         // là object Spring đưa vào để ta cấu hình bảo mật theo kiểu “builder”.
         return http
-                // API JWT không dùng form/cookie session nên chưa cần CSRF.
-                .csrf(AbstractHttpConfigurer::disable)
+                // React đọc cookie CSRF và gửi giá trị qua header X-XSRF-TOKEN.
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokens)
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .ignoringRequestMatchers(request -> !browserSession.matches(request)
+                                && (JwtAuthenticationFilter.usesBearerToken(request)
+                                    || sessionCookie.read(request) == null))
+                )
 
                 // server không nhớ trạng thái đăng nhập giữa các request
                 .sessionManagement(session -> session
@@ -86,15 +105,20 @@ public class SecurityConfig {
                         .authenticationEntryPoint(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)
                         )
+                        // Trả 403 trực tiếp để servlet giữ đúng trạng thái khi CSRF bị từ chối.
+                        .accessDeniedHandler((request, response, denied) ->
+                                response.setStatus(HttpStatus.FORBIDDEN.value()))
                 )
 
                 .authorizeHttpRequests(auth -> auth
                                 // URL bên dưới được gọi mà không cần token.
                                 .requestMatchers(
                                         "/api/auth/login",
-                                        "/api/auth/reactivate"
+                                        "/api/auth/reactivate",
+                                        "/api/auth/session",
+                                        "/api/auth/csrf"
                                 ).permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/auth/forgot-password", "/api/auth/reset-password", "/api/auth/request-verify-email", "/api/auth/verify-email").permitAll()
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/api/users"

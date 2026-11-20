@@ -96,7 +96,7 @@ if ! run_ssh 'command -v rsync >/dev/null 2>&1'; then
 fi
 
 # Dùng rsync --delete để bản triển khai phản ánh đúng source hiện tại.
-# deploy/.env bị loại trừ nên JWT, Gmail SMTP và PUBLIC_HOST trên EC2 được giữ nguyên.
+# deploy/.env bị loại trừ để giữ JWT, cấu hình SMTP và PUBLIC_HOST trên EC2.
 rsync_ssh=(ssh "${ssh_options[@]}")
 printf -v rsync_shell '%q ' "${rsync_ssh[@]}"
 
@@ -108,6 +108,7 @@ rsync -az --delete \
   --exclude 'data/' \
   --exclude 'config/mail-local.properties' \
   --exclude 'deploy/.env' \
+  --exclude 'deploy/aws-deploy.local.env' \
   -e "$rsync_shell" \
   "$api_root/" "$ssh_target:$remote_root/personal-finance-api/"
 
@@ -126,15 +127,21 @@ log "Build và khởi chạy API + client"
 run_ssh 'bash -s' <<'REMOTE'
 set -euo pipefail
 cd /opt/personal-finance/personal-finance-api
-sudo docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
+# Luôn tạo lại container sau khi build để JAR/CSS mới thực sự được nạp thay vì giữ container cũ.
+sudo docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build --force-recreate
 sudo docker compose --env-file deploy/.env -f deploy/compose.yaml ps
 REMOTE
 
 log "Chờ API sẵn sàng"
 # Caddy cấp chứng chỉ cho PUBLIC_HOST, không phải cho IP của EC2.
-# Đọc đúng hostname đang dùng từ .env trên máy chủ để kiểm tra TLS và API.
-public_host="$(run_ssh "sed -n 's/^PUBLIC_HOST=//p' '$remote_root/personal-finance-api/deploy/.env' | tail -n 1")"
-public_url="https://${public_host:-$AWS_HOST}"
+# File .env thuộc root trên máy chủ, nên cần sudo để chỉ đọc hostname công khai.
+public_host="$(run_ssh "sudo sed -n 's/^PUBLIC_HOST=//p' '$remote_root/personal-finance-api/deploy/.env' | tail -n 1")"
+if [[ -z "$public_host" ]]; then
+  printf 'Thiếu PUBLIC_HOST trong deploy/.env trên EC2; không thể kiểm tra HTTPS qua IP.\n' >&2
+  exit 1
+fi
+
+public_url="https://${public_host}"
 for attempt in $(seq 1 30); do
   status="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 "$public_url/api/users/me" || true)"
   if [[ "$status" == "401" ]]; then

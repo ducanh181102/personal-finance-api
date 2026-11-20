@@ -20,17 +20,20 @@ public class RecurringTransactionService {
     private final AccountService accountService;
     private final CategoryService categoryService;
     private final TransactionRepository transactionRepository;
+    private final NotificationService notificationService;
 
     public RecurringTransactionService(RecurringTransactionRepository recurringTransactionRepository,
                                        CurrentUserService currentUserService,
                                        AccountService accountService,
                                        CategoryService categoryService,
-                                       TransactionRepository transactionRepository) {
+                                       TransactionRepository transactionRepository,
+                                       NotificationService notificationService) {
         this.recurringTransactionRepository = recurringTransactionRepository;
         this.currentUserService = currentUserService;
         this.accountService = accountService;
         this.categoryService = categoryService;
         this.transactionRepository = transactionRepository;
+        this.notificationService = notificationService;
     }
 
     private RecurringTransaction getOwnedRecurringTransactionById(int id) {
@@ -114,7 +117,7 @@ public class RecurringTransactionService {
     }
 
     private void createTransactionByDueRecurringTransaction(RecurringTransaction dueRecurringTransaction) {
-        transactionRepository.save(new Transaction(
+        Transaction transaction = transactionRepository.save(new Transaction(
                 dueRecurringTransaction.getAccount(),
                 dueRecurringTransaction.getCategory().getType(),
                 dueRecurringTransaction.getAmount(),
@@ -123,6 +126,7 @@ public class RecurringTransactionService {
                 dueRecurringTransaction.getCategory(),
                 TransactionSource.RECURRING
         ));
+        notificationService.recordRecurringTransactionPosted(dueRecurringTransaction, transaction);
 
         dueRecurringTransaction.setNextRunDate(
                 dueRecurringTransaction.getFrequency().nextDateAfter(dueRecurringTransaction.getNextRunDate()));

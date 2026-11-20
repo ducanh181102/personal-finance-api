@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="x-apple-disable-message-reformatting">
+    <title>Xác thực email | Tài chính cá nhân</title>
+    <style>
+      @media screen and (max-width: 600px) {
+        .outer { padding: 20px 12px !important; }
+        .brand { padding: 20px 24px !important; }
+        .body { padding: 26px 24px !important; }
+        .title { font-size: 26px !important; line-height: 34px !important; }
+        .action { width: 100% !important; }
+        .button { display: block !important; text-align: center !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f3f6f0;color:#182c24;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">Xác nhận email cho tài khoản Tài chính cá nhân của bạn. Liên kết có hiệu lực trong {{expiryMinutes}} phút.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f6f0">
+      <tr>
+        <td class="outer" align="center" style="padding:40px 20px;">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:560px;border:1px solid #dae4da;border-radius:16px;">
+            <tr>
+              <td class="brand" style="padding:24px 36px;border-bottom:1px solid #dae4da;">
+                <p style="margin:0;color:#165542;font-size:18px;line-height:26px;font-weight:700;">Tài chính cá nhân</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="body" style="padding:32px 36px;">
+                <h1 class="title" style="margin:0 0 16px;color:#182c24;font-size:30px;line-height:38px;font-weight:700;letter-spacing:-0.5px;">Xác thực địa chỉ email</h1>
+                <p style="margin:0 0 24px;color:#56695e;font-size:16px;line-height:26px;">Xác nhận địa chỉ này để nhận thông báo từ Tài chính cá nhân, chẳng hạn như email nhắc kỳ trả góp khi bạn bật tính năng này.</p>
+                <table class="action" role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+                  <tr>
+                    <td align="center" bgcolor="#165542" style="border-radius:8px;mso-padding-alt:14px 24px;">
+                      <a class="button" href="{{verificationUrl}}" style="display:inline-block;padding:14px 24px;border-radius:8px;background-color:#165542;color:#ffffff;font-size:16px;line-height:22px;font-weight:700;text-decoration:none;">Xác nhận email</a>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#eff8f2" style="margin:0 0 22px;border-radius:8px;">
+                  <tr>
+                    <td style="padding:14px 18px;color:#164534;font-size:14px;line-height:23px;">Liên kết có hiệu lực trong <strong>{{expiryMinutes}} phút</strong> và chỉ dùng được một lần.</td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 8px;color:#56695e;font-size:13px;line-height:21px;">Bạn cũng có thể sao chép liên kết này vào trình duyệt.</p>
+                <p style="margin:0 0 22px;font-size:13px;line-height:21px;overflow-wrap:anywhere;word-break:break-all;"><a href="{{verificationUrl}}" style="color:#165542;text-decoration:underline;overflow-wrap:anywhere;word-break:break-all;">{{verificationUrl}}</a></p>
+                <p style="margin:0;padding-top:20px;border-top:1px solid #dae4da;color:#56695e;font-size:13px;line-height:21px;">Nếu bạn không yêu cầu xác thực địa chỉ này, hãy bỏ qua email.</p>
+              </td>
+            </tr>
+          </table>
+          <p style="max-width:560px;margin:18px 0 0;color:#56695e;font-size:12px;line-height:20px;text-align:center;">Email được gửi tự động từ Tài chính cá nhân.</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

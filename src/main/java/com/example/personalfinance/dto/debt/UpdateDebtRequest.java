@@ -25,6 +25,8 @@ public class UpdateDebtRequest {
     @FutureOrPresent(message = "Ngày trả kỳ đầu không được ở quá khứ.")
     private final LocalDate firstInstallmentDate;
 
+    private final Boolean installmentEmailReminderEnabled;
+
     @Size(max = 255, message = "Ghi chú tối đa 255 ký tự.")
     private final String note;
 
@@ -33,12 +35,14 @@ public class UpdateDebtRequest {
                              Boolean installmentEnabled,
                              java.math.BigDecimal monthlyInstallmentAmount,
                              LocalDate firstInstallmentDate,
+                             Boolean installmentEmailReminderEnabled,
                              String note) {
         this.personName = personName;
         this.dueDate = dueDate;
         this.installmentEnabled = installmentEnabled;
         this.monthlyInstallmentAmount = monthlyInstallmentAmount;
         this.firstInstallmentDate = firstInstallmentDate;
+        this.installmentEmailReminderEnabled = installmentEmailReminderEnabled;
         this.note = note;
     }
 
@@ -60,6 +64,10 @@ public class UpdateDebtRequest {
 
     public LocalDate getFirstInstallmentDate() {
         return firstInstallmentDate;
+    }
+
+    public Boolean getInstallmentEmailReminderEnabled() {
+        return installmentEmailReminderEnabled;
     }
 
     public String getNote() {

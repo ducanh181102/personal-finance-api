@@ -55,6 +55,7 @@ public class DebtService {
                            LocalDate dueDate,
                            BigDecimal monthlyInstallmentAmount,
                            LocalDate firstInstallmentDate,
+                           boolean installmentEmailReminderEnabled,
                            String note) {
         boolean installmentRequested = monthlyInstallmentAmount != null || firstInstallmentDate != null;
         if (!installmentRequested && dueDate == null) {
@@ -68,15 +69,18 @@ public class DebtService {
         Debt debt = new Debt(currentUserService.getCurrentUser(), personName, type, originalAmount,
                 dueDate == null ? firstInstallmentDate : dueDate, note,
                 monthlyInstallmentAmount, firstInstallmentDate);
+        debt.setInstallmentEmailReminderEnabled(installmentEmailReminderEnabled);
         return debtRepository.save(debt);
     }
 
+    @Transactional
     public Debt updateDebtById(int id,
                                String personName,
                                LocalDate dueDate,
                                Boolean installmentEnabled,
                                BigDecimal monthlyInstallmentAmount,
                                LocalDate firstInstallmentDate,
+                               Boolean installmentEmailReminderEnabled,
                                String note) {
         Debt debt = getDebtById(id);
         if (personName != null) {
@@ -109,6 +113,10 @@ public class DebtService {
 
         if (note != null) {
             debt.setNote(note);
+        }
+
+        if (installmentEmailReminderEnabled != null) {
+            debt.setInstallmentEmailReminderEnabled(installmentEmailReminderEnabled);
         }
 
         return debtRepository.save(debt);

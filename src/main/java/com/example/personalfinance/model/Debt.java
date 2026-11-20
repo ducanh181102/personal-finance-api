@@ -1,6 +1,8 @@
 package com.example.personalfinance.model;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -10,12 +12,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
+@DynamicUpdate
 @Table(name = "debts")
 public class Debt {
     private static final long MAX_INSTALLMENT_COUNT = 1_200L;
@@ -48,6 +55,14 @@ public class Debt {
     private BigDecimal monthlyInstallmentAmount;
 
     private LocalDate firstInstallmentDate;
+
+    private Boolean installmentEmailReminderEnabled;
+
+    @ElementCollection
+    @CollectionTable(name = "debt_installment_email_reminders", joinColumns = @JoinColumn(name = "debt_id"),
+            uniqueConstraints = @UniqueConstraint(columnNames = {"debt_id", "due_date"}))
+    @Column(name = "due_date", nullable = false)
+    private Set<LocalDate> emailedInstallmentDates = new HashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -126,6 +141,7 @@ public class Debt {
         if (monthlyAmount == null && firstDate == null) {
             monthlyInstallmentAmount = null;
             firstInstallmentDate = null;
+            installmentEmailReminderEnabled = false;
             return;
         }
         if (monthlyAmount == null || firstDate == null) {
@@ -150,6 +166,25 @@ public class Debt {
 
     public boolean hasInstallmentPlan() {
         return monthlyInstallmentAmount != null && firstInstallmentDate != null;
+    }
+
+    public boolean isInstallmentEmailReminderEnabled() {
+        return Boolean.TRUE.equals(installmentEmailReminderEnabled);
+    }
+
+    public void setInstallmentEmailReminderEnabled(boolean enabled) {
+        if (enabled && !hasInstallmentPlan()) {
+            throw new IllegalArgumentException("Cần có lịch trả góp để bật nhắc qua email.");
+        }
+        installmentEmailReminderEnabled = enabled;
+    }
+
+    public boolean wasInstallmentReminderSent(LocalDate dueDate) {
+        return emailedInstallmentDates.contains(dueDate);
+    }
+
+    public void markInstallmentReminderSent(LocalDate dueDate) {
+        emailedInstallmentDates.add(dueDate);
     }
 
     public LocalDate getNextInstallmentDate() {

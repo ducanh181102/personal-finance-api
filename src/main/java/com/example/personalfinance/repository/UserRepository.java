@@ -23,4 +23,7 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<User> findForUpdateByPasswordResetHash(String passwordResetHash);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<User> findForUpdateByEmailVerifyHash(String emailVerifyHash);
 }

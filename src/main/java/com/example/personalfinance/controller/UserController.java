@@ -10,10 +10,13 @@ import com.example.personalfinance.mapper.AccountMapper;
 import com.example.personalfinance.mapper.CategoryMapper;
 import com.example.personalfinance.mapper.UserMapper;
 import com.example.personalfinance.model.User;
+import com.example.personalfinance.security.BrowserSessionCookie;
 import com.example.personalfinance.service.AccountService;
 import com.example.personalfinance.service.CategoryService;
+import com.example.personalfinance.service.EmailVerifyService;
 import com.example.personalfinance.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,14 +32,20 @@ public class UserController {
     private final AccountMapper accountMapper;
     private final CategoryService categoryService;
     private final CategoryMapper categoryMapper;
+    private final BrowserSessionCookie sessionCookie;
+    private final EmailVerifyService emailVerifyService;
 
-    public UserController(UserService userService, AccountService accountService, UserMapper userMapper, AccountMapper accountMapper, CategoryService categoryService, CategoryMapper categoryMapper) {
+    public UserController(UserService userService, AccountService accountService, UserMapper userMapper,
+                          AccountMapper accountMapper, CategoryService categoryService, CategoryMapper categoryMapper,
+                          BrowserSessionCookie sessionCookie, EmailVerifyService emailVerifyService) {
         this.userService = userService;
         this.accountService = accountService;
         this.userMapper = userMapper;
         this.accountMapper = accountMapper;
         this.categoryService = categoryService;
         this.categoryMapper = categoryMapper;
+        this.sessionCookie = sessionCookie;
+        this.emailVerifyService = emailVerifyService;
     }
 
     @GetMapping("/me")
@@ -74,6 +83,7 @@ public class UserController {
     @PostMapping
     public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
         User user = userService.createUser(request.getName(), request.getEmail(), request.getPassword());
+        emailVerifyService.requestVerify(user.getEmail());
         return ResponseEntity.status(HttpStatus.CREATED).body(userMapper.toUserResponse(user));
     }
 
@@ -86,15 +96,20 @@ public class UserController {
 
     @PatchMapping("/me")
     public ResponseEntity<UserResponse> updateUser(@Valid @RequestBody UpdateUserRequest request) {
+        String previousEmail = userService.getUser().getEmail();
         User user = userService.updateUser(request.getName(), request.getEmail(), request.getPassword(),
                 request.getCurrentPassword());
-        return ResponseEntity.ok(userMapper.toUserResponse(user));
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+        if (!previousEmail.equals(user.getEmail())) {
+            response.header(HttpHeaders.SET_COOKIE, sessionCookie.clear());
+        }
+        return response.body(userMapper.toUserResponse(user));
     }
 
     @PatchMapping("/me/password")
     public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(request.currentPassword(), request.newPassword());
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, sessionCookie.clear()).build();
     }
 
     // Đình chỉ

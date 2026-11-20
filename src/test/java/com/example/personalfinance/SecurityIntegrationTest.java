@@ -13,6 +13,7 @@ import com.example.personalfinance.repository.CategoryRepository;
 import com.example.personalfinance.repository.TransactionRepository;
 import com.example.personalfinance.repository.UserRepository;
 import com.example.personalfinance.security.JwtService;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -28,24 +29,36 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:security-integration-test",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "app.auth.secure-cookies=true",
+        "app.password-reset.from="
 })
 @AutoConfigureMockMvc
 @Transactional
 class SecurityIntegrationTest {
+
+    private static final String SESSION_COOKIE = "__Host-finance-session";
+    private static final String CSRF_COOKIE = "__Host-finance-csrf";
+    private static final String CSRF_HEADER = "X-XSRF-TOKEN";
+    private static final String LOGIN_BODY = """
+            {"email":"security-a@example.com","password":"matkhau123"}
+            """;
 
     @Autowired
     private MockMvc mockMvc;
@@ -117,6 +130,115 @@ class SecurityIntegrationTest {
     @Test
     void returns401WhenProtectedEndpointHasNoToken() throws Exception {
         mockMvc.perform(get("/api/accounts"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void registersUserBeforeEmailVerification() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"New user","email":"signup@example.test","password":"signup-password-123"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("signup@example.test"))
+                .andExpect(jsonPath("$.emailVerifiedAt").value(nullValue()));
+    }
+
+    @Test
+    void returnsVerificationTimestampInUtc() throws Exception {
+        Instant verifiedAt = Instant.parse("2026-11-20T02:30:00Z");
+        userA.setEmailVerifiedAt(verifiedAt);
+        userRepository.save(userA);
+
+        mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailVerifiedAt").value(verifiedAt.toString()));
+    }
+
+    @Test
+    void browserSessionUsesSecureCookieAndRequiresCsrfForLoginWritesAndLogout() throws Exception {
+        mockMvc.perform(post("/api/auth/session")
+                        .contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+                .andExpect(status().isForbidden());
+
+        Cookie csrf = mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().secure(CSRF_COOKIE, true))
+                .andExpect(cookie().httpOnly(CSRF_COOKIE, false))
+                .andReturn().getResponse().getCookie(CSRF_COOKIE);
+        Cookie session = mockMvc.perform(post("/api/auth/session")
+                        .cookie(csrf).header(CSRF_HEADER, csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(userA.getEmail()))
+                .andExpect(jsonPath("$.accessToken").doesNotExist())
+                .andExpect(cookie().httpOnly(SESSION_COOKIE, true))
+                .andExpect(cookie().secure(SESSION_COOKIE, true))
+                .andExpect(cookie().path(SESSION_COOKIE, "/"))
+                .andExpect(cookie().sameSite(SESSION_COOKIE, "Lax"))
+                .andReturn().getResponse().getCookie(SESSION_COOKIE);
+
+        mockMvc.perform(get("/api/users/me").cookie(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userA.getId()));
+
+        String profileChange = """
+                {"name":"User A updated"}
+                """;
+        mockMvc.perform(patch("/api/users/me").cookie(session, csrf)
+                        .contentType(MediaType.APPLICATION_JSON).content(profileChange))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/users/me").cookie(session, csrf).header(CSRF_HEADER, csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON).content(profileChange))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("User A updated"));
+
+        mockMvc.perform(delete("/api/auth/session").cookie(session, csrf))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/auth/session").cookie(session, csrf).header(CSRF_HEADER, csrf.getValue()))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge(SESSION_COOKIE, 0))
+                .andExpect(cookie().secure(SESSION_COOKIE, true));
+    }
+
+    @Test
+    void requestingVerificationKeepsBrowserSession() throws Exception {
+        Cookie csrf = mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isNoContent())
+                .andReturn().getResponse().getCookie(CSRF_COOKIE);
+        Cookie session = new Cookie(SESSION_COOKIE, userAToken);
+
+        mockMvc.perform(post("/api/auth/request-verify-email")
+                        .cookie(session, csrf).header(CSRF_HEADER, csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"security-a@example.com"}
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(cookie().doesNotExist(SESSION_COOKIE));
+
+        mockMvc.perform(get("/api/users/me").cookie(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(userA.getEmail()));
+    }
+
+    @Test
+    void bearerRequestsTakePrecedenceOverBrowserCookie() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(cookie().doesNotExist(SESSION_COOKIE));
+
+        Cookie session = new Cookie(SESSION_COOKIE, userAToken);
+        mockMvc.perform(get("/api/users/me")
+                        .cookie(session).header(HttpHeaders.AUTHORIZATION, "Bearer " + userBToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("security-b@example.com"));
+        mockMvc.perform(patch("/api/users/me")
+                        .cookie(session).header(HttpHeaders.AUTHORIZATION, "Bearer invalid")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Invalid change\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -494,6 +616,38 @@ class SecurityIntegrationTest {
         mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, authorization))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Tên hiển thị mới"));
+    }
+
+    @Test
+    void changesLoginEmailAndClearsBrowserSession() throws Exception {
+        userA.markEmailVerified(Instant.parse("2026-11-20T02:30:00Z"));
+        userRepository.save(userA);
+        Cookie session = new Cookie(SESSION_COOKIE, userAToken);
+        Cookie csrf = mockMvc.perform(get("/api/auth/csrf"))
+                .andExpect(status().isNoContent())
+                .andReturn().getResponse().getCookie(CSRF_COOKIE);
+
+        mockMvc.perform(patch("/api/users/me")
+                        .cookie(session, csrf).header(CSRF_HEADER, csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"new-address@example.test","currentPassword":"matkhau123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("new-address@example.test"))
+                .andExpect(jsonPath("$.emailVerifiedAt").value(nullValue()))
+                .andExpect(cookie().maxAge(SESSION_COOKIE, 0));
+
+        mockMvc.perform(get("/api/users/me").cookie(session))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/auth/session")
+                        .cookie(csrf).header(CSRF_HEADER, csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"new-address@example.test","password":"matkhau123"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userA.getId()));
     }
 
     @Test

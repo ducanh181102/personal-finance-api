@@ -2,6 +2,8 @@
 
 REST API quản lý tài chính cá nhân với giao dịch thu chi, ví, ngân sách, chuyển tiền, tiết kiệm và công nợ. API phục vụ giao diện React có báo cáo theo tháng, dự báo dòng tiền, hồ sơ người dùng và khôi phục mật khẩu qua email.
 
+Ứng dụng công khai ở [financeducanh.id.vn](https://financeducanh.id.vn). Khi cài bản v1.0.0, dùng cùng tag `v1.0.0` cho API và [frontend](https://github.com/ducanh181102/personal-finance-frontend).
+
 ## Công nghệ
 
 | Thành phần | Sử dụng |
@@ -13,7 +15,7 @@ REST API quản lý tài chính cá nhân với giao dịch thu chi, ví, ngân 
 | H2 | Database file cục bộ |
 | Jakarta Validation | Validation dữ liệu đầu vào |
 | Spring Security | Bảo vệ endpoint và phân quyền theo user sở hữu dữ liệu |
-| Spring Mail | Gửi email đặt lại mật khẩu qua SMTP |
+| Spring Mail | Gửi email xác minh, đặt lại mật khẩu và nhắc trả góp qua SMTP |
 | JJWT | Tạo, kiểm tra JWT Bearer token |
 | Maven Wrapper | Build và chạy kiểm thử |
 
@@ -35,9 +37,9 @@ Trên Windows dùng `mvnw.cmd spring-boot:run`. Ứng dụng mặc định chạ
 
 1. Kiểm tra **Billing and Cost Management → Free Tier / Credits** để biết số credit và thời hạn còn lại. Với Free plan dùng credit, nhãn **Free tier eligible** không có nghĩa máy chủ được chạy miễn phí vô thời hạn. Xem [AWS Free Tier cho EC2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html).
 2. Trong **EC2 → Launch instance**, đặt tên `personal-finance`. Chọn **Ubuntu Server 24.04 LTS**, kiến trúc **64-bit (Arm)** và instance type **t4g.small** với 2 vCPU, 2 GiB RAM. Các Dockerfile của hai dự án hỗ trợ ARM64.
-3. Dùng ổ đĩa **20 GiB gp3** và kết nối mạng công khai. Tạo security group riêng cho ứng dụng, cho phép TCP **80/443** từ internet và SSH **22** chỉ từ IP của máy quản trị. Backend và database được truy cập qua mạng Docker bên trong VM.
+3. Dùng ổ đĩa **20 GiB gp3** và kết nối mạng công khai. Tạo security group riêng cho ứng dụng và cho phép TCP **80/443** từ internet. Dùng AWS Systems Manager Session Manager cho kết nối SSH triển khai. Backend và database được truy cập qua mạng Docker bên trong VM.
 4. Dùng public key của máy quản trị trong **EC2 → Network & Security → Key Pairs → Actions → Import key pair**, rồi chọn key này khi tạo instance. Khóa riêng giữ trên máy quản trị. Ubuntu dùng tên đăng nhập SSH `ubuntu`.
-5. Khi instance chạy và qua kiểm tra trạng thái, ghi lại public IP. Nếu cần giữ địa chỉ sau khi dừng/bật máy chủ, gán một **Elastic IP** và dùng địa chỉ đó cho `PUBLIC_HOST` bên dưới. [Đơn giá public IPv4](https://aws.amazon.com/vpc/pricing/).
+5. Khi instance chạy và qua kiểm tra trạng thái, gán **Elastic IP** để giữ địa chỉ khi dừng rồi bật máy chủ. Tạo bản ghi DNS loại **A** cho tên miền trỏ đến Elastic IP, rồi đặt `PUBLIC_HOST` bằng tên miền đó. [Đơn giá public IPv4](https://aws.amazon.com/vpc/pricing/).
 
 Với tài khoản theo **Sign up for AWS (new)**, dùng region AWS đã gán cho project trong cả Console và AWS CLI. Có thể dùng `deploy/ubuntu-bootstrap.sh` làm **User data** khi tạo VM Ubuntu mới để tự cài Docker từ kho chính thức và tạo 2 GiB swap phục vụ build. Script này chạy bằng quyền root trên VM Ubuntu.
 
@@ -45,23 +47,29 @@ Chi phí máy chủ, ổ đĩa, IPv4 và lưu lượng được tính theo tài 
 
 ### Chạy ứng dụng
 
-Cài Docker và Docker Compose trên VM Linux. Đặt hai thư mục `personal-finance-api` và `personal-finance-frontend` cùng cấp. VM cần có địa chỉ IP công khai hoặc domain trỏ về VM và nhận kết nối TCP cổng 80 và 443 để Caddy cấp, gia hạn chứng chỉ HTTPS.
+Cài Docker và Docker Compose trên VM Linux. Đặt hai thư mục `personal-finance-api` và `personal-finance-frontend` cùng cấp. Tên miền cần trỏ về IP công khai của VM. Caddy cần nhận kết nối TCP ở cổng 80 và 443 để cấp và gia hạn chứng chỉ HTTPS.
 
-Trong thư mục backend, tạo file cấu hình cục bộ với địa chỉ công khai của VM. Dùng IP hoặc hostname, ví dụ `203.0.113.10`, rồi tạo khóa JWT mới.
+Khi triển khai lần đầu, tạo `deploy/.env` trong thư mục backend trên VM. Đặt `PUBLIC_HOST` bằng tên miền của ứng dụng và tạo khóa JWT mới.
 
 ```bash
 umask 077
-PUBLIC_HOST=203.0.113.10
+PUBLIC_HOST=financeducanh.id.vn
 printf 'PUBLIC_HOST=%s\nJWT_SECRET=%s\n' "$PUBLIC_HOST" "$(openssl rand -base64 32)" > deploy/.env
 ```
 
-Để kích hoạt quên mật khẩu, thêm `SPRING_MAIL_USERNAME` và `SPRING_MAIL_PASSWORD` vào `deploy/.env`. Khi dùng Gmail SMTP, kiểm tra VM có kết nối được tới `smtp.gmail.com:587`.
+Để bật email hệ thống, đặt máy chủ SMTP, thông tin xác thực và địa chỉ người gửi trong `deploy/.env`. Bản chạy trên AWS dùng Amazon SES tại Sydney với cấu hình sau. Thêm `SPRING_MAIL_USERNAME` và `SPRING_MAIL_PASSWORD` do SES cấp trực tiếp trên máy chủ.
+
+```dotenv
+SPRING_MAIL_HOST=email-smtp.ap-southeast-2.amazonaws.com
+SPRING_MAIL_PORT=587
+PASSWORD_RESET_FROM=no-reply@financeducanh.id.vn
+```
 
 ```bash
 docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
 ```
 
-Mở địa chỉ HTTPS đã cấu hình. Caddy phục vụ giao diện và chuyển `/api` tới Spring Boot trên mạng Docker. H2 lưu vào volume `finance_data` để dữ liệu còn sau khi cập nhật hoặc khởi động lại container. Lần chạy đầu tạo database mới. Dùng lại file `deploy/.env` khi cập nhật để giữ khóa JWT và cấu hình email.
+Mở ứng dụng tại [financeducanh.id.vn](https://financeducanh.id.vn). Caddy phục vụ giao diện và chuyển `/api` tới Spring Boot trên mạng Docker. H2 lưu vào volume `finance_data` để dữ liệu còn sau khi cập nhật hoặc khởi động lại container. Lần chạy đầu tạo database mới. Dùng lại file `deploy/.env` khi cập nhật để giữ khóa JWT và cấu hình email.
 
 ### Cập nhật AWS bằng một lệnh
 
@@ -71,7 +79,18 @@ Khi đã có VM AWS theo cấu hình ở trên, tạo file cấu hình cục b�
 cp deploy/aws-deploy.local.env.example deploy/aws-deploy.local.env
 ```
 
-Sửa `deploy/aws-deploy.local.env`: thay `your-name` bằng tên thư mục người dùng trên Mac, giữ `AWS_HOST` là Elastic IP hiện tại và đặt `FRONTEND_ROOT` đúng đường dẫn dự án frontend. Sau đó, mỗi lần đã sửa API hoặc client, chạy duy nhất:
+Trong `deploy/aws-deploy.local.env`, thay `your-name` bằng tên thư mục người dùng trên Mac và đặt `FRONTEND_ROOT` đúng đường dẫn dự án frontend. `AWS_HOST=personal-finance-ssm` dùng bí danh SSH qua Session Manager, nên script hoạt động từ các mạng khác nhau mà không cần cập nhật IP trong security group.
+
+Để cấu hình trên máy khác, cài Session Manager plugin, đăng nhập AWS CLI bằng profile `personal-finance` và thêm bí danh này vào cấu hình SSH. `HostKeyAlias` phải khớp tên đã dùng khi lưu khóa máy chủ trong `AWS_KNOWN_HOSTS`. [Cấu hình SSH qua Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-enable-ssh-connections.html)
+
+```ssh
+Host personal-finance-ssm
+    HostName i-0ec40d2093a818da4
+    HostKeyAlias 52.63.133.86
+    ProxyCommand aws --profile personal-finance --region ap-southeast-2 ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p
+```
+
+Khi phiên AWS CLI hết hạn, chạy `aws login --profile personal-finance --region ap-southeast-2`. Sau đó chạy lệnh triển khai từ thư mục backend.
 
 ```bash
 ./deploy/aws-deploy.sh
@@ -79,13 +98,9 @@ Sửa `deploy/aws-deploy.local.env`: thay `your-name` bằng tên thư mục ng�
 
 Script tự đồng bộ hai dự án, build Docker trên EC2, khởi chạy lại API/client và chờ endpoint API trả `401` khi chưa đăng nhập. Kết quả `401` ở bước cuối nghĩa là reverse proxy và bảo vệ API hoạt động đúng. `deploy/.env` và volume database H2 trên EC2 được giữ nguyên trong khi cập nhật. Để chỉ kiểm tra kết nối trước khi deploy, dùng `./deploy/aws-deploy.sh --check`.
 
-### URL miễn phí khi chưa mua domain
-
-Nếu chưa cần domain riêng, có thể dùng hostname miễn phí theo dạng `ten-goi-nho.<elastic-ip-dang-bang-dau-gach-ngang>.sslip.io`, ví dụ `financeducanh.52-63-133-86.sslip.io`. `sslip.io` tự phân giải hostname có IP nhúng về đúng Elastic IP, nên không phải tạo DNS record hay tài khoản. Đặt hostname này vào `PUBLIC_HOST` trong `deploy/.env`, sau đó chạy lại Docker Compose để Caddy cấp HTTPS. Đây phù hợp cho bản demo; hostname phụ thuộc vào dịch vụ `sslip.io` và Elastic IP hiện tại, không phải domain do bạn sở hữu.
-
 ### Sao lưu database AWS tự động
 
-Chạy một lần trên Mac để tạo bucket S3 riêng tư, mã hóa AES-256, quy tắc tự xóa backup sau 30 ngày và IAM role chỉ có quyền đọc/ghi bucket backup. Script cũng cài lịch sao lưu lúc khoảng **02:30 giờ Việt Nam** mỗi ngày.
+Chạy một lần trên Mac để tạo bucket S3 riêng tư, mã hóa AES-256 và tự xóa backup sau 30 ngày. Quyền đọc và ghi S3 của EC2 chỉ áp dụng cho bucket sao lưu. Script cũng cài lịch sao lưu lúc khoảng **02:30 giờ Việt Nam** mỗi ngày.
 
 ```bash
 ./deploy/aws-backup-setup.sh
@@ -103,7 +118,7 @@ sudo journalctl -u personal-finance-backup.service -n 50 --no-pager
 
 ## Xác thực và phân quyền
 
-Đăng ký, đăng nhập và khôi phục tài khoản là endpoint public. Tất cả endpoint dữ liệu khác cần JWT trong header:
+Đăng ký, đăng nhập và khôi phục tài khoản là endpoint public. Các endpoint dữ liệu yêu cầu JWT. Trên web, trình duyệt gửi JWT qua cookie phiên. Với Postman hoặc ứng dụng gọi API trực tiếp, gửi JWT qua header sau.
 
 ```http
 Authorization: Bearer <accessToken>
@@ -113,9 +128,14 @@ Authorization: Bearer <accessToken>
 | --- | --- | --- | --- |
 | POST | `/api/users` | Đăng ký user | 201 |
 | POST | `/api/auth/login` | Đăng nhập, nhận JWT | 200 |
+| GET | `/api/auth/csrf` | Lấy cookie CSRF cho trình duyệt | 204 |
+| POST | `/api/auth/session` | Đăng nhập trên web, đặt cookie JWT và trả hồ sơ | 200 |
+| DELETE | `/api/auth/session` | Đăng xuất trên web, xóa cookie JWT | 204 |
 | POST | `/api/auth/reactivate` | Khôi phục user đã vô hiệu hóa | 200 |
 | POST | `/api/auth/forgot-password` | Yêu cầu liên kết đặt lại qua email với `email` | 202 |
 | POST | `/api/auth/reset-password` | Đặt lại bằng `token` và `password` mới | 204 |
+| POST | `/api/auth/request-verify-email` | Yêu cầu gửi lại liên kết xác minh với `email` | 202 |
+| POST | `/api/auth/verify-email` | Xác minh địa chỉ email bằng `token` | 202 |
 | GET | `/api/users/me` | Xem user hiện tại | 200 |
 | GET | `/api/users/accounts/me` | Danh sách tài khoản đang hoạt động của user | 200 |
 | GET | `/api/users/categories/me` | Danh sách danh mục đang hoạt động của user | 200 |
@@ -144,7 +164,11 @@ Ví dụ đăng nhập:
 
 Response login chứa `accessToken` và thông tin user, không bao giờ trả về `passwordHash`.
 
+Khi đăng nhập qua `POST /api/auth/session`, backend trả hồ sơ và gửi JWT trong cookie `HttpOnly` với `SameSite=Lax`. Profile `deploy` thêm `Secure` để cookie chỉ đi qua HTTPS. Frontend đọc cookie CSRF để gửi header `X-XSRF-TOKEN` khi đăng nhập, đăng xuất hoặc gọi API ghi bằng cookie.
+
 Trang **Hồ sơ và bảo mật** lấy thông tin tài khoản qua `GET /api/users/me` khi khôi phục phiên. Để đổi tên hiển thị, gửi `{"name":"Tên mới"}` tới `PATCH /api/users/me`. Đổi tên giữ phiên hiện tại.
+
+Đổi email qua `PATCH /api/users/me` với `email` và `currentPassword`. Khi cập nhật thành công, các JWT cũ hết hiệu lực, người dùng đăng nhập lại bằng email mới và yêu cầu gửi thư xác minh trong hồ sơ. API hồ sơ trả `emailVerifiedAt` sau khi người dùng xác minh. Liên kết xác minh dùng một lần trong 30 phút.
 
 Để đổi mật khẩu trong phiên đang đăng nhập, gửi `PATCH /api/users/me/password` cùng Bearer token và body sau.
 
@@ -161,7 +185,7 @@ User chỉ có thể xem, tạo, sửa hoặc xóa dữ liệu thuộc chính h�
 
 `DELETE /api/users/me` là **soft delete**: đặt `active = false`, không xóa lịch sử tài chính. Khi user bị vô hiệu hóa, API từ chối token của user. Gửi `email` và `oldPassword` đến `/api/auth/reactivate` để khôi phục user và nhận token mới.
 
-### Gửi email đặt lại mật khẩu
+### Cấu hình email hệ thống
 
 Đặt các biến môi trường sau trước khi chạy Spring Boot. Nếu chạy từ IntelliJ, đặt chúng trong cấu hình chạy ứng dụng.
 
@@ -530,11 +554,14 @@ Khoản trả một lần gửi `dueDate` như trên. Để tạo khoản trả 
   "originalAmount": 12000000,
   "monthlyInstallmentAmount": 1000000,
   "firstInstallmentDate": "2026-12-10",
+  "installmentEmailReminderEnabled": true,
   "note": "Trả góp 12 kỳ"
 }
 ```
 
 Response của khoản trả góp có thêm `monthlyInstallmentAmount`, `firstInstallmentDate`, `nextInstallmentDate`, `nextInstallmentAmount` và `installmentCount`. Cảnh báo cũng dùng ngày/số tiền của kỳ kế tiếp. `PATCH /api/debts/{id}` nhận `installmentEnabled`, `monthlyInstallmentAmount`, `firstInstallmentDate` để bật hoặc đổi lịch; không thể đổi lịch khi đã có payment. Gửi `installmentEnabled: false` cùng `dueDate` để chuyển lại khoản trả một lần.
+
+Đặt `installmentEmailReminderEnabled` khi tạo hoặc sửa khoản trả góp để chọn nhận email. Tác vụ kiểm tra vào đầu mỗi giờ theo giờ Việt Nam và gửi cho địa chỉ đã xác minh nếu kỳ còn thiếu tiền đến hạn trong hôm nay hoặc ba ngày tới. Hệ thống ghi nhận từng kỳ sau khi SMTP chấp nhận thư để những lượt chạy tiếp theo bỏ qua kỳ đã nhắc.
 
 Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAmount` và `type` không được sửa trực tiếp sau khi tạo. Lịch trả góp chỉ là kế hoạch/cảnh báo, không tự tạo giao dịch hay trừ tiền. Mỗi lần trả vẫn phải gọi API Debt Payment; lần đó mới cập nhật ví và giảm dư nợ.
 
@@ -560,6 +587,16 @@ Khi tạo debt: `remainingAmount = originalAmount`, `status = OPEN`. `originalAm
 Mỗi payment làm giảm `remainingAmount` và sinh giao dịch `DEBT_PAYMENT`, ảnh hưởng đến số dư tài khoản. Khoản vay tạo giao dịch chi, khoản cho mượn tạo giao dịch thu khi thu hồi nợ. Khi `remainingAmount` bằng `0`, debt chuyển sang `PAID`.
 
 Khi hủy, payment chuyển sang `CANCELLED`, tiền được cộng lại vào số nợ còn lại và debt trở về `OPEN`. API giữ giao dịch gốc và tạo giao dịch `DEBT_PAYMENT_REVERSAL` để đảo ảnh hưởng lên số dư. Response trả `transactionId`, `reversalTransactionId` và `cancelledAt` để đối chiếu lịch sử.
+
+### Thông báo
+
+| Method | Đường dẫn | Chức năng | Status thành công |
+| --- | --- | --- | --- |
+| GET | `/api/notifications` | Xem thông báo gần đây và số chưa đọc | 200 |
+| PATCH | `/api/notifications/{id}/read` | Đánh dấu một thông báo đã đọc | 200 |
+| PATCH | `/api/notifications/read-all` | Đánh dấu tất cả thông báo đã đọc | 204 |
+
+Thông báo trong ứng dụng gồm cảnh báo ngân sách, công nợ sắp đến hạn hoặc quá hạn và giao dịch định kỳ đã ghi nhận.
 
 ## Validation và lỗi
 
@@ -621,6 +658,7 @@ Các test hiện kiểm tra:
 - Savings Goal cập nhật số tiền góp và trạng thái hoàn thành; không thể xóa goal đã có contribution.
 - Debt Payment cập nhật số nợ còn lại, đóng/mở debt đúng lúc, chặn trả vượt nợ và chặn user khác truy cập.
 - Khoản trả góp suy ra kỳ kế tiếp, tính đúng phần còn thiếu khi trả một phần kỳ, cảnh báo theo kỳ và tách từng kỳ trong dự báo dòng tiền.
+- Đổi email yêu cầu mật khẩu hiện tại, kết thúc phiên cũ và đặt lại trạng thái xác minh. Email nhắc trả góp chỉ gửi đến địa chỉ đã xác minh và bỏ qua kỳ đã nhắc.
 
 ## Cấu trúc source
 

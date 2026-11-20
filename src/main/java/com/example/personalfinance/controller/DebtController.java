@@ -53,6 +53,7 @@ public class DebtController {
                 request.getDueDate(),
                 request.getMonthlyInstallmentAmount(),
                 request.getFirstInstallmentDate(),
+                Boolean.TRUE.equals(request.getInstallmentEmailReminderEnabled()),
                 request.getNote());
         DebtResponse debtResponse = debtMapper.toDebtResponse(debt);
         return ResponseEntity.status(HttpStatus.CREATED).body(debtResponse);
@@ -63,6 +64,7 @@ public class DebtController {
         Debt debt = debtService.updateDebtById(id, request.getPersonName(),
                 request.getDueDate(), request.getInstallmentEnabled(),
                 request.getMonthlyInstallmentAmount(), request.getFirstInstallmentDate(),
+                request.getInstallmentEmailReminderEnabled(),
                 request.getNote());
         DebtResponse debtResponse = debtMapper.toDebtResponse(debt);
         return ResponseEntity.ok(debtResponse);
